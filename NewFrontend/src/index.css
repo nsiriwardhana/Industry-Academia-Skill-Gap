@@ -1,0 +1,195 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@layer base {
+  :root {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 8%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 174 72% 46%;
+    --primary-foreground: 222 47% 6%;
+
+    --secondary: 222 30% 14%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 222 30% 12%;
+    --muted-foreground: 215 20% 55%;
+
+    --accent: 35 92% 55%;
+    --accent-foreground: 222 47% 6%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 222 30% 18%;
+    --input: 222 30% 14%;
+    --ring: 174 72% 46%;
+
+    --radius: 0.75rem;
+
+    /* Custom tokens */
+    --brand-blue: #0298cf;
+    --brand-blue-light: hsl(199 89% 72%);
+    --gradient-blue-mix: linear-gradient(135deg, var(--brand-blue) 0%, var(--brand-blue-light) 100%);
+
+    --gradient-primary: linear-gradient(135deg, hsl(174, 72%, 46%), hsl(199, 89%, 48%));
+    --gradient-accent: linear-gradient(135deg, hsl(35, 92%, 55%), hsl(25, 95%, 53%));
+    --gradient-hero: linear-gradient(135deg, hsl(222, 47%, 6%) 0%, hsl(222, 47%, 11%) 50%, hsl(222, 47%, 6%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(222, 47%, 10%), hsl(222, 47%, 7%));
+    --gradient-pipeline-1: linear-gradient(135deg, hsl(280, 70%, 50%), hsl(260, 80%, 60%));
+    --gradient-pipeline-2: linear-gradient(135deg, hsl(199, 89%, 48%), hsl(174, 72%, 46%));
+    --gradient-pipeline-3: linear-gradient(135deg, hsl(142, 70%, 45%), hsl(160, 84%, 39%));
+    --gradient-pipeline-4: linear-gradient(135deg, hsl(35, 92%, 55%), hsl(45, 93%, 47%));
+    --gradient-pipeline-5: linear-gradient(135deg, hsl(340, 82%, 52%), hsl(0, 84%, 60%));
+    --gradient-pipeline-6: linear-gradient(135deg, hsl(174, 72%, 46%), hsl(142, 70%, 45%));
+
+    --shadow-glow: 0 0 60px -12px hsl(174, 72%, 46%, 0.4);
+    --shadow-card: 0 4px 24px -4px hsl(222, 47%, 2%, 0.6);
+    --shadow-elevated: 0 12px 48px -12px hsl(222, 47%, 2%, 0.8);
+
+    --glass-bg: hsl(222, 47%, 8%, 0.6);
+    --glass-border: hsl(222, 30%, 20%, 0.5);
+
+    --sidebar-background: 222 47% 6%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 174 72% 46%;
+    --sidebar-primary-foreground: 222 47% 6%;
+    --sidebar-accent: 222 30% 14%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 222 30% 18%;
+    --sidebar-ring: 174 72% 46%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer utilities {
+  .text-gradient-primary {
+    @apply bg-clip-text text-transparent;
+    background-image: var(--gradient-primary);
+  }
+
+  .text-gradient-accent {
+    @apply bg-clip-text text-transparent;
+    background-image: var(--gradient-accent);
+  }
+
+  .bg-gradient-primary {
+    background-image: var(--gradient-primary);
+  }
+
+  .bg-gradient-accent {
+    background-image: var(--gradient-accent);
+  }
+
+  .bg-gradient-blue-mix {
+    background-image: var(--gradient-blue-mix);
+  }
+
+  .bg-gradient-hero {
+    background-image: var(--gradient-hero);
+  }
+
+  .bg-gradient-card {
+    background-image: var(--gradient-card);
+  }
+
+  .bg-glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+  }
+
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-elevated {
+    box-shadow: var(--shadow-elevated);
+  }
+
+  .pipeline-stage-1 { background-image: var(--gradient-pipeline-1); }
+  .pipeline-stage-2 { background-image: var(--gradient-pipeline-2); }
+  .pipeline-stage-3 { background-image: var(--gradient-pipeline-3); }
+  .pipeline-stage-4 { background-image: var(--gradient-pipeline-4); }
+  .pipeline-stage-5 { background-image: var(--gradient-pipeline-5); }
+  .pipeline-stage-6 { background-image: var(--gradient-pipeline-6); }
+}
+
+@layer components {
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.6s ease-out forwards;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.5s ease-out forwards;
+  }
+
+  .animate-scale-in {
+    animation: scale-in 0.4s ease-out forwards;
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes progress-bar {
+  0% { width: 0%; }
+  100% { width: 100%; }
+}

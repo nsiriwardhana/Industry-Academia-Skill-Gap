@@ -1,0 +1,101 @@
+{
+  "role_key": "ai_ml_engineer",
+  "top_k": 25,
+  "extracted_data": {
+    "candidate_id": "CAND_ML_2024_001",
+    "name": "Sarah Chen",
+    "email": "sarah.chen@email.com",
+    "phone": "+94-77-123-4567",
+    "experience_level": "mid",
+    "total_experience_months": 36,
+    "skills": [
+      {"skill_name": "Python", "proficiency": "expert"},
+      {"skill_name": "Machine Learning", "proficiency": "expert"},
+      {"skill_name": "Deep Learning", "proficiency": "advanced"},
+      {"skill_name": "TensorFlow", "proficiency": "advanced"},
+      {"skill_name": "PyTorch", "proficiency": "intermediate"},
+      {"skill_name": "Scikit-learn", "proficiency": "expert"},
+      {"skill_name": "NumPy", "proficiency": "expert"},
+      {"skill_name": "Pandas", "proficiency": "expert"},
+      {"skill_name": "SQL", "proficiency": "advanced"},
+      {"skill_name": "PostgreSQL", "proficiency": "intermediate"},
+      {"skill_name": "MongoDB", "proficiency": "intermediate"},
+      {"skill_name": "Docker", "proficiency": "advanced"},
+      {"skill_name": "Kubernetes", "proficiency": "beginner"},
+      {"skill_name": "Git", "proficiency": "expert"},
+      {"skill_name": "AWS", "proficiency": "intermediate"},
+      {"skill_name": "Azure", "proficiency": "beginner"},
+      {"skill_name": "Data Analysis", "proficiency": "expert"},
+      {"skill_name": "Data Visualization", "proficiency": "advanced"},
+      {"skill_name": "Statistics", "proficiency": "advanced"},
+      {"skill_name": "Computer Vision", "proficiency": "intermediate"},
+      {"skill_name": "NLP", "proficiency": "advanced"},
+      {"skill_name": "FastAPI", "proficiency": "intermediate"},
+      {"skill_name": "Flask", "proficiency": "advanced"},
+      {"skill_name": "REST API", "proficiency": "advanced"},
+      {"skill_name": "Jupyter", "proficiency": "expert"}
+    ],
+    "work_experiences": [
+      {
+        "title": "Machine Learning Engineer",
+        "company_name": "AI Solutions Ltd",
+        "duration_months": 24,
+        "skills_used": ["Python", "Machine Learning", "TensorFlow", "PyTorch", "Docker", "AWS", "FastAPI"]
+      },
+      {
+        "title": "Data Scientist",
+        "company_name": "DataTech Corp",
+        "duration_months": 12,
+        "skills_used": ["Python", "Machine Learning", "Scikit-learn", "SQL", "Data Visualization"]
+      }
+    ],
+    "projects": [
+      {
+        "name": "Customer Sentiment Analysis System",
+        "description": "Built NLP-based sentiment analysis pipeline processing 10K+ reviews daily with 92% accuracy. Deployed using Docker and AWS ECS.",
+        "technologies": ["Python", "NLP", "TensorFlow", "Docker", "AWS", "FastAPI"]
+      },
+      {
+        "name": "Real-time Fraud Detection Model",
+        "description": "Developed ML model for detecting fraudulent transactions with <100ms latency. Reduced false positives by 35%.",
+        "technologies": ["Python", "Machine Learning", "Scikit-learn", "PostgreSQL", "Flask"]
+      },
+      {
+        "name": "Image Classification API",
+        "description": "Created scalable image classification API using CNNs. Handles 1000+ requests/min with 95% accuracy.",
+        "technologies": ["Python", "Deep Learning", "PyTorch", "Computer Vision", "Docker", "Kubernetes"]
+      },
+      {
+        "name": "Predictive Maintenance Dashboard",
+        "description": "Built ML-powered dashboard for predicting equipment failures. Reduced downtime by 40%.",
+        "technologies": ["Python", "Machine Learning", "Data Visualization", "MongoDB", "Flask"]
+      }
+    ],
+    "certifications": [
+      {
+        "name": "AWS Certified Machine Learning - Specialty",
+        "issuer": "Amazon Web Services",
+        "year": 2023
+      },
+      {
+        "name": "TensorFlow Developer Certificate",
+        "issuer": "Google",
+        "year": 2022
+      },
+      {
+        "name": "Deep Learning Specialization",
+        "issuer": "Coursera",
+        "year": 2022
+      }
+    ],
+    "education": [
+      {
+        "institution_name": "University of Colombo",
+        "degree": "Bachelor of Science",
+        "field_of_study": "Computer Science & Engineering",
+        "graduation_year": 2021
+      }
+    ]
+  }
+}
+

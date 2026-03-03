@@ -1,0 +1,161 @@
+# Root .gitignore for the CV Parser Agent monorepo
+
+# --- Python artifacts ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+wheels/
+pip-wheel-metadata/
+
+# Environment variable / secrets
+.env
+.env.*
+.env.local
+
+# IDEs / editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+logs/
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model weights & trained artifacts (ignore large binaries)
+**/models/trained/
+**/models/trained/*
+*.pth
+*.pt
+*.ckpt
+*.onnx
+
+# Data (large datasets / generated content)
+data/
+**/cleaned_data/
+**/cleaned_data/*
+**/outputs/
+uploads/
+
+# Experiment outputs
+output/
+exported_embeddings/
+*.csv
+embeddings_*.npy
+*.npy
+
+# Neo4j / DB runtime
+neo4j/
+**/neo4j/logs/
+**/neo4j/data/
+
+# Neo4j export files (large .cypher files)
+neo4j_export.cypher
+**/neo4j_export/**/*.cypher
+neo4j_export/
+
+# Sphinx
+_build/
+
+# Workspace
+*.code-workspace
+
+# Python packaging build caches
+*.egg
+*.whl
+
+# Local project files
+.vs/
+
+# Allow small, explicit files if necessary via .gitignore exceptions (add e.g. "!data/small_example.csv")
+
+# Qwen Explainer Output
+qwen-explainer-output/
+
+
+
+# Nipuni's Gitignore
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# ===== Node / Frontend =====
+node_modules/
+dist/
+.vite/
+*.log
+
+# ===== OS files =====
+.DS_Store
+Thumbs.db
+
+# ===== Env files / secrets =====
+.env
+.env.*
+*.key
+*.pem
+
+# ===== Project runtime folders =====
+backend/uploads/
+backend/data/index/
+backend/data/chroma/
+backend/data/faiss/
+backend/output/
+*.sqlite3
+*.db
+
+# ===== Jupyter =====
+.ipynb_checkpoints/
