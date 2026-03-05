@@ -503,110 +503,21 @@ async def run_ollama(request: ProjectRequest):
 @app.post("/generate-project")
 async def generate_project(request: ProjectRequest):
     """
-    Endpoint for project generation and skill gap analysis using AI models.
-    
-    This endpoint:
-    1. Accepts StudentData and JobData from the frontend
-    2. Computes skill gaps locally
-    3. Calls Gemini or Ollama to generate intelligent recommendations
-    4. Returns comprehensive analysis with AI-generated project recommendations
+    Unified endpoint for project generation.
+    Stream raw text to allow frontend parsing/display.
+    Logs the complete output for feedback collection.
     """
-    logger.info(f"Project generation request: {request.student_data.name} → {request.target_role}")
-    
-    try:
-        # Generate a synthetic candidate ID from student data
-        candidate_id = f"SYNTHETIC_{request.student_data.name.replace(' ', '_').upper()}_{int(datetime.utcnow().timestamp())}"
-        
-        # Compute skill gaps
-        target_skills = set(request.job_data.required_skills)
-        current_skills = set(request.student_data.skills)
-        missing_skills = list(target_skills - current_skills)
-        covered_skills = list(current_skills & target_skills)
-        match_percentage = (len(covered_skills) / len(target_skills) * 100) if target_skills else 0
-        
-        # Prepare input data for logging
-        input_data = _build_input_dict(request)
-        
-        # Select AI model provider and get recommendation
-        logger.info(f"Calling {request.model_provider} for recommendations...")
-        
-        if request.model_provider == "gemini":
-            if not gemini_client:
-                raise Exception("Gemini API key not configured")
-            generator = run_gemini(request)
-        elif request.model_provider in ["ollama", "ollama_generic"]:
-            generator = run_ollama(request)
-        else:
-            raise ValueError(f"Unsupported model provider: {request.model_provider}")
-        
-        # Collect the AI-generated recommendation
-        ai_recommendation = ""
-        async for chunk in generator:
-            ai_recommendation += chunk
-        
-        # Try to parse as JSON, fallback to raw text
-        try:
-            recommendation_json = json.loads(ai_recommendation)
-        except json.JSONDecodeError:
-            recommendation_json = {
-                "gap_analysis": {
-                    "missing_skills": missing_skills,
-                    "match_percentage": match_percentage,
-                    "analysis_summary": ai_recommendation[:500]
-                },
-                "project_recommendation": {
-                    "project_title": f"Capstone Project: {request.target_role}",
-                    "objective": f"Learn {', '.join(missing_skills[:3])}",
-                    "tech_stack": missing_skills[:5],
-                    "implementation_steps": ["Step 1: Learn fundamentals", "Step 2: Build project", "Step 3: Deploy and showcase"]
-                }
-            }
-        
-        # Build final response
-        results = {
-            "candidate_id": candidate_id,
-            "target_role": request.target_role,
-            "model_provider": request.model_provider,
-            "timestamp": datetime.utcnow().isoformat(),
-            "student_profile": {
-                "name": request.student_data.name,
-                "current_role": request.student_data.current_role,
-                "skills": request.student_data.skills,
-                "major": request.student_data.major,
-                "interests": request.student_data.interests,
-            },
-            "job_profile": {
-                "role": request.job_data.role,
-                "required_skills": request.job_data.required_skills,
-                "description": request.job_data.description_summary,
-            },
-            "analysis": {
-                "current_skills": list(current_skills),
-                "target_skills": list(target_skills),
-                "missing_skills": missing_skills,
-                "covered_skills": covered_skills,
-                "match_percentage": match_percentage,
-            },
-            "ai_recommendation": recommendation_json,
-            "raw_ai_output": ai_recommendation,
-        }
-        
-        # Log model output for feedback collection
-        try:
-            prompt_version = get_current_prompt_version()
-            log_model_output(input_data, ai_recommendation, request.model_provider, prompt_version)
-        except Exception as e:
-            logger.warning(f"Failed to log model output: {e}")
-        
-        logger.info(f"✓ Analysis complete. Match: {match_percentage:.1f}%, Provider: {request.model_provider}")
-        return JSONResponse(status_code=200, content=results)
-        
-    except Exception as e:
-        logger.error(f"Project generation failed: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Analysis failed: {str(e)}"
-        )
+    input_data = _build_input_dict(request)
+
+    if request.model_provider == "gemini":
+        generator = run_gemini(request)
+    else:
+        # Covers "ollama" and "ollama_generic"
+        generator = run_ollama(request)
+
+    # Wrap with logging to capture output for feedback
+    logged_generator = logging_wrapper(generator, input_data, request.model_provider)
+    return StreamingResponse(logged_generator, media_type="text/plain")
 
 
 @app.post("/generate-project-from-sources")
