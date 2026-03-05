@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { XAIExplanation } from "@/components/XAIExplanation";
 import { ArrowLeft, ArrowRight, AlertTriangle, CheckCircle2, TrendingUp, Target, BookOpen, Award, Briefcase, Code, ExternalLink, Star } from "lucide-react";
-import { getCourseRecommendations, type CourseRecommendation } from "@/services/courseService";
+import { getCourseRecommendations, getCourseRecommendationsForJobGap, type CourseRecommendation } from "@/services/courseService";
 
 interface SkillGapItem {
   skill: string;
@@ -48,8 +48,8 @@ const SkillGap = () => {
   // Fetch course recommendations
   useEffect(() => {
     const fetchCourses = async () => {
-      if (!results.candidate_id || !results.role_key) {
-        console.log('⚠️ Missing candidate_id or role_key, skipping course recommendations');
+      if (!results.candidate_id) {
+        console.log('⚠️ Missing candidate_id, skipping course recommendations');
         return;
       }
 
@@ -57,15 +57,47 @@ const SkillGap = () => {
       setCoursesError(null);
 
       try {
-        console.log('📚 Fetching courses for:', results.candidate_id, results.role_key);
-        const courseData = await getCourseRecommendations(
-          results.candidate_id,
-          results.role_key,
-          25, // top_k deficits
-          10  // top_n courses
-        );
-        setCourses(courseData.recommendations || []);
-        console.log('✅ Courses loaded:', courseData.recommendations.length);
+        // Check if this is job-based analysis (custom_job or missing role_key)
+        const isJobBased = results.role_key === 'custom_job' || !results.role_key;
+        
+        if (isJobBased && results.skill_gap_top && results.skill_gap_top.length > 0) {
+          // For job-based analysis ONLY: Use new job gap endpoint
+          console.log('📚 Job Gap Analysis: Using job-specific course recommendation');
+          
+          // Prepare skill deficits from the gap analysis
+          const skillDeficits = results.skill_gap_top.map((gap: any) => ({
+            skill_name: gap.skill_name || gap.skill,
+            deficit: gap.deficit || 0,
+            importance: gap.importance || 0,
+            confidence: gap.confidence || 0,
+            match_strength: gap.match_strength || 0
+          }));
+          
+          const courseData = await getCourseRecommendationsForJobGap(
+            results.candidate_id,
+            skillDeficits,
+            10 // top_n courses
+          );
+          
+          setCourses(courseData.recommendations || []);
+          console.log('✅ Courses loaded (job gap):', courseData.recommendations.length);
+        } else if (results.role_key) {
+          // For role-based analysis: Use original role-based endpoint
+          console.log('📚 Role-Based Analysis: Using traditional role endpoint:', results.role_key);
+          
+          const courseData = await getCourseRecommendations(
+            results.candidate_id,
+            results.role_key,
+            25, // top_k deficits
+            10  // top_n courses
+          );
+          
+          setCourses(courseData.recommendations || []);
+          console.log('✅ Courses loaded (role-based):', courseData.recommendations.length);
+        } else {
+          console.log('⚠️ Cannot determine analysis type, skipping courses');
+          setCoursesError('Unable to determine course recommendations');
+        }
       } catch (error) {
         console.error('❌ Failed to fetch courses:', error);
         setCoursesError(error instanceof Error ? error.message : 'Failed to load course recommendations');
@@ -75,7 +107,7 @@ const SkillGap = () => {
     };
 
     fetchCourses();
-  }, [results.candidate_id, results.role_key]);
+  }, [results.candidate_id, results.role_key, results.skill_gap_top]);
 
   // Process skill gaps
   const skillGaps: SkillGapItem[] = (results.skill_gap_top || []).map((gap: any) => {
@@ -390,6 +422,21 @@ const SkillGap = () => {
         )}
 
         {/* Course Recommendations Section */}
+        {coursesError && (
+          <div className="bg-gradient-card rounded-2xl border border-border p-6 mb-8 shadow-card animate-fade-in">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
+                <BookOpen className="w-5 h-5 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground">Course Recommendations</h3>
+            </div>
+            <div className="flex items-start gap-3 p-4 bg-muted/30 rounded-lg">
+              <AlertTriangle className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-muted-foreground">{coursesError}</p>
+            </div>
+          </div>
+        )}
+        
         {loadingCourses && (
           <div className="bg-gradient-card rounded-2xl border border-border p-6 mb-8 shadow-card animate-fade-in">
             <div className="flex items-center gap-3 mb-4">
@@ -402,12 +449,6 @@ const SkillGap = () => {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
               <p className="text-sm text-muted-foreground mt-4">Finding best courses for your skill gaps...</p>
             </div>
-          </div>
-        )}
-
-        {coursesError && (
-          <div className="bg-destructive/10 rounded-2xl border border-destructive/30 p-6 mb-8">
-            <p className="text-sm text-destructive">{coursesError}</p>
           </div>
         )}
 

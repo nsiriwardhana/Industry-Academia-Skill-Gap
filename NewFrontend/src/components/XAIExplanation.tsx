@@ -68,9 +68,11 @@ interface Props {
 }
 
 export function XAIExplanation({ xai, explanation, className = "" }: Props) {
-  const [activeXaiTab, setActiveXaiTab] = useState<"colab" | "shap">("shap");
+  // Default to "colab" if only explanation exists, otherwise "shap"
+  const [activeXaiTab, setActiveXaiTab] = useState<"colab" | "shap">(!xai && explanation ? "colab" : "shap");
 
-  if (!xai) {
+  // Show "not available" only if BOTH xai and explanation are missing
+  if (!xai && !explanation) {
     return (
       <div className={`bg-gradient-card rounded-2xl border border-border p-6 ${className}`}>
         <div className="flex items-center gap-3 mb-4">
@@ -91,8 +93,8 @@ export function XAIExplanation({ xai, explanation, className = "" }: Props) {
     );
   }
 
-  const shapLevel = xai.shap_level;
-  const skillLevel = xai.skill_level;
+  const shapLevel = xai?.shap_level;
+  const skillLevel = xai?.skill_level;
 
   // Get the factors arrays (handle both old and new field names)
   const rawIncreasingFactors = shapLevel?.top_increasing_factors || shapLevel?.top_positive_contributors || [];
@@ -153,24 +155,26 @@ export function XAIExplanation({ xai, explanation, className = "" }: Props) {
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeXaiTab} onValueChange={(v) => setActiveXaiTab(v as "colab" | "shap")} className="w-full">
-        <div className="px-6 pt-4">
-          <TabsList className="grid w-full grid-cols-2 bg-muted/50">
-            <TabsTrigger value="colab" className="gap-2">
-              <Lightbulb className="w-4 h-4" />
-              AI Explanation
-            </TabsTrigger>
-            <TabsTrigger value="shap" className="gap-2">
-              <Brain className="w-4 h-4" />
-              SHAP Analysis
-            </TabsTrigger>
-          </TabsList>
-        </div>
+      {/* Render explanation content - with or without tabs */}
+      {xai && explanation ? (
+        // Case 1: Both exist - show tabs
+        <Tabs value={activeXaiTab} onValueChange={(v) => setActiveXaiTab(v as "colab" | "shap")} className="w-full">
+          <div className="px-6 pt-4">
+            <TabsList className="grid w-full grid-cols-2 bg-muted/50">
+              <TabsTrigger value="colab" className="gap-2">
+                <Lightbulb className="w-4 h-4" />
+                AI Explanation
+              </TabsTrigger>
+              <TabsTrigger value="shap" className="gap-2">
+                <Brain className="w-4 h-4" />
+                SHAP Analysis
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-        <div className="p-6">
-          {/* Colab AI Explanation Tab */}
-          <TabsContent value="colab" className="mt-0 space-y-4">
+          <div className="p-6">
+            {/* Colab AI Explanation Tab */}
+            <TabsContent value="colab" className="mt-0 space-y-4">
             {explanation && (explanation.explanation || explanation.text || explanation.explanation_text) ? (
               <>
                 <div className="p-6 bg-gradient-to-br from-primary/10 to-accent/10 rounded-xl border border-primary/20">
@@ -407,6 +411,59 @@ export function XAIExplanation({ xai, explanation, className = "" }: Props) {
           </TabsContent>
         </div>
       </Tabs>
+      ) : explanation ? (
+        // Case 2: Only explanation exists - show directly without tabs
+        <div className="p-6">
+          {(explanation.explanation || explanation.text || explanation.explanation_text) ? (
+            <div className="p-6 bg-gradient-to-br from-primary/10 to-accent/10 rounded-xl border border-primary/20">
+              <div className="flex items-center gap-2 mb-4">
+                <Lightbulb className="w-5 h-5 text-primary" />
+                <h4 className="font-semibold text-foreground">AI-Generated Insights</h4>
+              </div>
+              <div className="prose prose-sm max-w-none">
+                <p className="text-foreground leading-relaxed whitespace-pre-wrap">
+                  {explanation.explanation || explanation.text || explanation.explanation_text}
+                </p>
+              </div>
+              
+              {/* Metadata */}
+              {(explanation.confidence_score || explanation.generation_time || explanation.model) && (
+                <div className="mt-4 pt-4 border-t border-border flex flex-wrap gap-4 text-sm text-muted-foreground">
+                  {explanation.confidence_score && (
+                    <div className="flex items-center gap-2">
+                      <span>Confidence:</span>
+                      <span className="font-medium text-primary">
+                        {Math.round(explanation.confidence_score * 100)}%
+                      </span>
+                    </div>
+                  )}
+                  {explanation.generation_time && (
+                    <div className="flex items-center gap-2">
+                      <span>Generated in:</span>
+                      <span className="font-medium text-foreground">
+                        {explanation.generation_time.toFixed(2)}s
+                      </span>
+                    </div>
+                  )}
+                  {explanation.model && (
+                    <div className="flex items-center gap-2">
+                      <span>Model:</span>
+                      <span className="font-medium text-foreground">
+                        {explanation.model}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-6 bg-muted/30 rounded-lg text-center">
+              <AlertCircle className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">No AI explanation available</p>
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -133,6 +133,26 @@ class SkillGapResponse(BaseModel):
 # Course Recommendation Models
 # ============================================================================
 
+class JobGapSkillDeficit(BaseModel):
+    """Simplified skill deficit for job gap analysis (without TF-IDF fields)."""
+    skill_name: str = Field(..., description="Name of the skill")
+    deficit: float = Field(..., ge=0.0, description="Skill deficit score")
+    importance: float = Field(..., ge=0.0, le=1.0, description="Skill importance")
+    confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Candidate confidence in skill")
+    match_strength: Optional[float] = Field(None, ge=0.0, le=1.0, description="Match strength")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "skill_name": "Python",
+                "deficit": 0.8,
+                "importance": 0.9,
+                "confidence": 0.1,
+                "match_strength": 0.1
+            }
+        }
+
+
 class CourseRecommendation(BaseModel):
     """Course recommendation with gain score."""
     course_id: str = Field(..., description="Unique course identifier")

@@ -60,3 +60,45 @@ export async function getCourseRecommendations(
 
   return data;
 }
+
+/**
+ * Get course recommendations for job gap analysis (custom job descriptions only)
+ * For role-based analysis, use getCourseRecommendations() instead
+ */
+export async function getCourseRecommendationsForJobGap(
+  candidateId: string,
+  skillDeficits: Array<{
+    skill_name: string;
+    deficit: number;
+    importance: number;
+    confidence?: number;
+    match_strength?: number;
+  }>,
+  topN: number = 10
+): Promise<CourseRecommendationResponse> {
+  console.log('📚 Fetching course recommendations for job gap:', {
+    candidateId,
+    skillCount: skillDeficits.length,
+    topN,
+  });
+
+  const url = `${ENDPOINTS.RECOMMENDATION.BASE}/candidates/${candidateId}/courses/recommend-for-job-gap?top_n=${topN}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: REQUEST_HEADERS.JSON,
+    body: JSON.stringify(skillDeficits),
+    ...DEFAULT_OPTIONS,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('❌ Course recommendation error:', errorText);
+    throw new Error(`Course recommendation failed: ${response.status} ${errorText}`);
+  }
+
+  const data = await response.json();
+  console.log('✅ Course recommendations received:', data);
+
+  return data;
+}

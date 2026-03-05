@@ -171,6 +171,8 @@ const Pipeline = () => {
               importance: s.importance,
               match_strength: s.match_strength
             })),
+            // Include XAI data from backend if available
+            xai: jobGapData.xai,
             // Store explanation text if available
             explanation_text: jobGapData.explanation_text,
             candidate_upsert: jobGapData.candidate_upsert

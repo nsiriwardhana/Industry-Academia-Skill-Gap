@@ -57,14 +57,19 @@ async def lifespan(app: FastAPI):
         
         # Load GNN model
         logger.info("Loading GNN model for link prediction...")
-        base_path = Path(__file__).parent.parent / "GNN-Link-Prediction"
-        model_path = str(base_path / "models" / "best_gnn_linkpred.pt")
-        data_path = str(base_path / "output" / "heterodata_lp.pt")
-        id_maps_path = str(base_path / "output" / "id_maps.json")
-        
-        gnn_service.load_model(model_path, data_path, id_maps_path)
-        logger.info("[OK] GNN model loaded successfully")
-        logger.info(f"  - Stats: {gnn_service.get_stats()}")
+        try:
+            base_path = Path(__file__).parent.parent / "GNN-Link-Prediction"
+            model_path = str(base_path / "models" / "best_gnn_linkpred.pt")
+            data_path = str(base_path / "output" / "heterodata_lp.pt")
+            id_maps_path = str(base_path / "output" / "id_maps.json")
+            
+            gnn_service.load_model(model_path, data_path, id_maps_path)
+            logger.info("[OK] GNN model loaded successfully")
+            logger.info(f"  - Stats: {gnn_service.get_stats()}")
+        except Exception as e:
+            logger.warning(f"[SKIP] GNN model loading failed (non-critical): {e}")
+            logger.warning("  - GNN-powered features will not be available")
+            logger.warning("  - Basic recommendations will still work")
         
         logger.info("[OK] Application startup complete")
     except Exception as e:

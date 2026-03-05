@@ -2,7 +2,7 @@
 API routes for Advanced Recommendation System.
 """
 import logging
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Query
 from database import Neo4jConnection
 from services import (
@@ -483,6 +483,81 @@ def recommend_courses(
                 role_name=role_name,
                 top_k_deficits_considered=len(top_deficits),
                 recommendations=enhanced_recommendations
+            )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to recommend courses: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate course recommendations: {str(e)}"
+        )
+
+
+@router.post(
+    "/candidates/{candidate_id}/courses/recommend-for-job-gap",
+    response_model=CourseRecommendationResponse,
+    tags=["Course Recommendations"]
+)
+def recommend_courses_for_job_gap(
+    candidate_id: str,
+    deficits: List[SkillDeficit],
+    top_n: int = Query(10, ge=1, le=50, description="Number of courses to recommend")
+):
+    """
+    Recommend courses for job gap analysis (custom job descriptions).
+    
+    This endpoint is specifically designed for job-based gap analysis where
+    you have skill deficits from analyzing a custom job description.
+    It does not require a predefined role_key.
+    
+    For role-based analysis, use GET /candidates/{candidate_id}/roles/{role_key}/recommendations
+    
+    Args:
+        candidate_id: Candidate identifier
+        deficits: List of skill deficits from job gap analysis
+        top_n: Number of courses to recommend (default: 10)
+        
+    Returns:
+        Top-N course recommendations optimized for the job description gaps
+        
+    Example Request:
+        POST /candidates/CAND_001/courses/recommend-for-job-gap?top_n=10
+        Body: [
+            {
+                "skill_name": "Python",
+                "deficit": 0.8,
+                "importance": 0.9,
+                "confidence": 0.1,
+                "match_strength": 0.1
+            }
+        ]
+    """
+    logger.info(f"Recommending courses for job gap: candidate={candidate_id}, skills={len(deficits)}")
+    
+    try:
+        if not deficits:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one skill deficit must be provided"
+            )
+        
+        with Neo4jConnection.get_session() as session:
+            # Convert Pydantic models to dicts
+            deficit_dicts = [d.dict() for d in deficits]
+            
+            # Recommend courses using the service
+            recommendations = CourseRecommendationService.recommend_courses(
+                session, candidate_id, deficit_dicts, top_n
+            )
+            
+            return CourseRecommendationResponse(
+                candidate_id=candidate_id,
+                role_key="job_gap",  # Special key for job-based analysis
+                role_name="Job Gap Analysis",
+                top_k_deficits_considered=len(deficit_dicts),
+                recommendations=[CourseRecommendation(**rec) for rec in recommendations]
             )
     
     except HTTPException:
