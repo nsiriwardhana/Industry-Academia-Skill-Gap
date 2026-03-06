@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import User
+from app.models import User, Admin
 
 # Security scheme for JWT Bearer token
 security = HTTPBearer()
@@ -148,6 +148,88 @@ async def get_current_user(
     
     if user is None:
         raise credentials_exception
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is inactive"
+        )
+    
+    return user
+
+
+async def get_current_admin(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+) -> Admin:
+    """
+    Dependency to get the current authenticated admin from JWT token.
+    
+    This function protects admin-only routes by verifying the token
+    contains admin credentials.
+    
+    Args:
+        credentials: HTTP Bearer token credentials from request header
+        db: Database session
+        
+    Returns:
+        Admin object of the authenticated administrator
+        
+    Raises:
+        HTTPException 401: If token is invalid or admin not found
+        HTTPException 403: If admin account is inactive
+        
+    Example:
+        @app.get("/admin/dashboard")
+        async def admin_dashboard(current_admin: Admin = Depends(get_current_admin)):
+            return {"admin_id": current_admin.id}
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate admin credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    try:
+        # Extract token from credentials
+        token = credentials.credentials
+        
+        # Verify and decode token
+        payload = verify_token(token)
+        
+        if payload is None:
+            raise credentials_exception
+        
+        # Extract admin_id from token payload
+        admin_id: int = payload.get("admin_id")
+        
+        if admin_id is None:
+            raise credentials_exception
+        
+        # Verify this is an admin token (not a regular user token)
+        is_admin: bool = payload.get("is_admin", False)
+        if not is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin access required"
+            )
+            
+    except JWTError:
+        raise credentials_exception
+    
+    # Get admin from database
+    admin = db.query(Admin).filter(Admin.id == admin_id).first()
+    
+    if admin is None:
+        raise credentials_exception
+    
+    if not admin.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin account is inactive"
+        )
+    
+    return admin
     
     if not user.is_active:
         raise HTTPException(

@@ -10,6 +10,7 @@ from app.config import settings
 from app.database import init_db
 from app.routes import auth
 from app.routes import candidate
+from app.routes import admin
 
 # Create FastAPI application instance
 app = FastAPI(
@@ -45,6 +46,9 @@ app.include_router(auth.router)
 
 # Include candidate routes
 app.include_router(candidate.router)
+
+# Include admin routes
+app.include_router(admin.router)
 
 
 @app.on_event("startup")

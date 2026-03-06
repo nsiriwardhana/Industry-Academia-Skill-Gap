@@ -16,6 +16,8 @@ import Recommendations from "./pages/Recommendations";
 import NotFound from "./pages/NotFound";
 import Profile from "./pages/Profile";
 import CourseRecommendations from "./pages/CourseRecommendations";
+import AdminLogin from "./pages/AdminLogin";
+import AdminDashboard from "./pages/AdminDashboard";
 import {
   TranscriptUploadPage,
   TranscriptDetailsPage,
@@ -221,6 +223,10 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            
+            {/* Admin Routes - No AuthProvider protection, uses separate admin auth */}
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin/dashboard" element={<AdminDashboard />} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>
