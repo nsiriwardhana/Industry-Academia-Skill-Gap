@@ -23,6 +23,8 @@ export const ENDPOINTS = {
     EVOLUTIONS: `${API_BASE}/prompt-evolutions`,
     CURRENT_PROMPT: `${API_BASE}/current-prompt`,
     REGENERATE: `${API_BASE}/run-regeneration`,
+    LIST_DATASETS: `${API_BASE}/list-datasets`,
+    UPLOAD_TO_HF: `${API_BASE}/upload-to-hf`,
   },
   // Companion services (scraper endpoints now served by gaps-analyzer via Neo4j)
   SCRAPER: {

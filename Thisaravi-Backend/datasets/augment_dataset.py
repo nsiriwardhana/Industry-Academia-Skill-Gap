@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 import logging
 import itertools
 from smart_generator import get_smart_data
+from hf_uploader import upload_dataset
 
 
 # --- Logging Setup ---
@@ -46,7 +47,30 @@ def log_message(msg):
 GENERATION_MODE = os.getenv("GENERATION_MODE", "v1") 
 
 SCRIPT_DIR = os.path.dirname(__file__)
-INPUT_FILE = os.path.join(SCRIPT_DIR, "seeds.jsonl")    # Source of User Prompts
+
+# Allow the seed file to be overridden via env var.
+# Set SEED_FILE=real_seeds.jsonl to use real student data collected from the app.
+# Falls back to the synthetic seeds.jsonl if unset or if the real file has fewer
+# than MIN_REAL_SEEDS entries.
+MIN_REAL_SEEDS = int(os.getenv("MIN_REAL_SEEDS", "5"))
+_env_seed = os.getenv("SEED_FILE", "")
+if _env_seed:
+    _candidate = os.path.join(SCRIPT_DIR, _env_seed) if not os.path.isabs(_env_seed) else _env_seed
+    if os.path.exists(_candidate):
+        with open(_candidate) as _f:
+            _real_count = sum(1 for l in _f if l.strip())
+        if _real_count >= MIN_REAL_SEEDS:
+            INPUT_FILE = _candidate
+            log_message(f"Using real student seeds: {INPUT_FILE} ({_real_count} entries)")
+        else:
+            INPUT_FILE = os.path.join(SCRIPT_DIR, "seeds.jsonl")
+            log_message(f"Real seed file has only {_real_count} entries (< {MIN_REAL_SEEDS}), falling back to synthetic seeds.")
+    else:
+        INPUT_FILE = os.path.join(SCRIPT_DIR, "seeds.jsonl")
+        log_message(f"SEED_FILE '{_env_seed}' not found, falling back to synthetic seeds.")
+else:
+    INPUT_FILE = os.path.join(SCRIPT_DIR, "seeds.jsonl")
+
 TARGET_COUNT = 200
 
 if GENERATION_MODE == "v1":
@@ -396,6 +420,16 @@ def augment_dataset(
             pass # Skip errorszx
 
     log_message(f"Done! {success_count} entries saved to {output_file}.")
+
+    # --- Auto-upload to HuggingFace Hub ---
+    if success_count > 0 and os.path.exists(output_file):
+        log_message("[HF Upload] Uploading dataset to HuggingFace Hub...")
+        upload_dataset(
+            file_path=output_file,
+            commit_message=f"Auto-upload: {os.path.basename(output_file)} ({success_count} entries, mode={active_mode})",
+        )
+    else:
+        log_message("[HF Upload] No entries generated; skipping upload.")
 
 if __name__ == "__main__":
     augment_dataset()

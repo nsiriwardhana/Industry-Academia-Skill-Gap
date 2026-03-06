@@ -1,5 +1,7 @@
 import streamlit as st
 import json
+import os
+from pathlib import Path
 from feedback.pipeline import (
     run_analysis_phase,
     run_evolution_phase,
@@ -225,19 +227,54 @@ if evolutions:
     dataset_name_v1 = f"student_advisor_dataset_v1_evolved_{_evo_num_p4}.jsonl"
     dataset_name_v2 = f"student_advisor_dataset_v2_evolved_{_evo_num_p4}.jsonl"
 
-    st.markdown(f"**v1 (Text) Dataset:** `datasets/{dataset_name_v1}`")
-    st.markdown(f"**v2 (JSON) Dataset:** `datasets/{dataset_name_v2}`")
-    st.markdown("**Instructions:**")
+    _datasets_dir = Path(__file__).parent / "datasets"
+    _available = [
+        f.name for f in sorted(_datasets_dir.glob("*.jsonl"))
+        if f.name not in ("seeds.jsonl", "real_seeds.jsonl", "test_sample.jsonl")
+    ]
+
+    st.markdown("#### Upload Dataset to HuggingFace")
+    _default_idx = (
+        _available.index(dataset_name_v1)
+        if dataset_name_v1 in _available
+        else (len(_available) - 1 if _available else 0)
+    )
+    selected_dataset = st.selectbox(
+        "Dataset file to upload",
+        _available if _available else [""],
+        index=_default_idx,
+    )
+
+    hf_repo_override = st.text_input(
+        "HuggingFace repo (owner/repo-name)",
+        placeholder="Leave blank to use HF_DATASET_REPO from .env or auto-derive",
+    )
+
+    if st.button("Upload to HuggingFace", type="primary", disabled=not _available):
+        from datasets.hf_uploader import upload_dataset
+        _file_path = _datasets_dir / selected_dataset
+        with st.spinner(f"Uploading {selected_dataset} to HuggingFace..."):
+            success = upload_dataset(
+                file_path=str(_file_path),
+                commit_message=f"Manual upload from Evolution Dashboard: {selected_dataset}",
+                repo_id=hf_repo_override.strip() or None,
+            )
+        if success:
+            st.success(f"✓ '{selected_dataset}' uploaded successfully!")
+        else:
+            st.error("Upload failed. Check that HF_TOKEN is set in .env and the repo name is correct.")
+
+    st.markdown("---")
+    st.markdown("**Next steps after upload:**")
     st.markdown(f"""
-1. Run the dataset verification and upload script to push the dataset to HuggingFace
-2. Open the Colab notebook `notebooks/gemma_3_4b_student_advisor_v2.ipynb`
-3. Change the `my_dataset` variable to point to the new HuggingFace dataset
-4. Run all cells (same LoRA fine-tuning pipeline)
-5. Download the GGUF model and register with Ollama:
+1. Open the Colab notebook `notebooks/gemma_3_4b_student_advisor_v2.ipynb`
+2. Change the `my_dataset` variable to point to the new HuggingFace dataset
+3. Run all cells (same LoRA fine-tuning pipeline)
+4. Download the GGUF model and register with Ollama:
    ```
    ollama create student-advisor:{latest_evo.new_prompt_version} -f Modelfile
    ```
-6. Update `.env` to point to the new model tag
+5. Update `.env` to point to the new model tag
 """)
 else:
     st.info("No evolutions applied yet.")

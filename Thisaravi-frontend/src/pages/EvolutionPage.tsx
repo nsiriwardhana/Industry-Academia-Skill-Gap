@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { LLMProvider } from '@/services/evolutionService';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -25,6 +25,9 @@ import {
   fetchEvolutions,
   fetchCurrentPrompt,
   runRegeneration,
+  listDatasets,
+  uploadToHF,
+  type DatasetFile,
 } from '@/services/evolutionService';
 
 export default function EvolutionPage() {
@@ -35,6 +38,7 @@ export default function EvolutionPage() {
   const [targetCount, setTargetCount] = useState(200);
   const [diffPreview, setDiffPreview] = useState<string | null>(null);
   const [generationMode, setGenerationMode] = useState<'v1' | 'v2'>('v2');
+  const [hfDataset, setHfDataset] = useState<string>('');
 
   // Queries
   const { data: status } = useQuery({
@@ -94,8 +98,15 @@ export default function EvolutionPage() {
       runRegeneration(evoId, provider, targetCount, mode),
     onSuccess: (data) => {
       toast.success(`Dataset generated: ${data.output_path}`);
+      queryClient.invalidateQueries({ queryKey: ['datasets'] });
     },
     onError: (err) => toast.error(`Regeneration failed: ${err.message}`),
+  });
+
+  const hfUploadMutation = useMutation({
+    mutationFn: () => uploadToHF(hfDataset, undefined),
+    onSuccess: (data) => toast.success(`✓ '${data.filename}' uploaded to HuggingFace!`),
+    onError: (err) => toast.error(`Upload failed: ${err.message}`),
   });
 
   const feedbackCount = status?.total_feedback || 0;
@@ -103,6 +114,23 @@ export default function EvolutionPage() {
   const selectedReport = selectedReportIdx ? reports[parseInt(selectedReportIdx)] : null;
   const selectedEvo = selectedEvoIdx ? evolutions[parseInt(selectedEvoIdx)] : null;
   const latestEvo = evolutions.length > 0 ? evolutions[evolutions.length - 1] : null;
+
+  const { data: datasetsData, isLoading: datasetsLoading, error: datasetsError } = useQuery({
+    queryKey: ['datasets'],
+    queryFn: listDatasets,
+    retry: 1,
+  });
+  const availableDatasets: DatasetFile[] = datasetsData?.datasets ?? [];
+
+  // Auto-select the latest dataset when the list loads
+  useEffect(() => {
+    if (availableDatasets.length > 0 && !hfDataset) {
+      setHfDataset(availableDatasets[availableDatasets.length - 1].filename);
+    }
+  }, [availableDatasets.length]);
+
+  const selectedDatasetInfo = availableDatasets.find((d) => d.filename === hfDataset);
+  const insufficientData = selectedDatasetInfo !== undefined && selectedDatasetInfo.entry_count < 200;
 
   return (
     <div>
@@ -444,44 +472,82 @@ export default function EvolutionPage() {
               <p className="text-xs text-muted-foreground">Provider: <span className="font-mono">{provider}</span></p>
             </CardHeader>
             <CardContent>
-              {latestEvo ? (
-                <div className="space-y-2 text-sm">
-                  {(() => {
-                    const evoNum = latestEvo.new_prompt_version.split('_').pop() || '1';
-                    return (
-                      <>
-                        <p>
-                          <span className="text-muted-foreground">v1 (Text) Dataset:</span>{' '}
-                          <code className="bg-muted px-1 rounded text-xs">
-                            datasets/student_advisor_dataset_v1_evolved_{evoNum}.jsonl
-                          </code>
-                        </p>
-                        <p>
-                          <span className="text-muted-foreground">v2 (JSON) Dataset:</span>{' '}
-                          <code className="bg-muted px-1 rounded text-xs">
-                            datasets/student_advisor_dataset_v2_evolved_{evoNum}.jsonl
-                          </code>
-                        </p>
-                      </>
-                    );
-                  })()}
-                  <p className="font-medium">Instructions:</p>
-                  <ol className="list-decimal list-inside space-y-1 text-sm">
-                    <li>Run the dataset verification and upload script to push the dataset to HuggingFace</li>
-                    <li>Open the Colab notebook <code className="bg-muted px-1 rounded text-xs">notebooks/gemma_3_4b_student_advisor_v2.ipynb</code></li>
-                    <li>Change the <code className="bg-muted px-1 rounded text-xs">my_dataset</code> variable to point to the new HuggingFace dataset</li>
-                    <li>Run all cells (same LoRA fine-tuning pipeline)</li>
-                    <li>Download the GGUF model and register with Ollama:
-                      <code className="block bg-muted px-2 py-1 rounded text-xs mt-1">
-                        ollama create student-advisor:{latestEvo.new_prompt_version} -f Modelfile
-                      </code>
-                    </li>
-                    <li>Update <code className="bg-muted px-1 rounded text-xs">.env</code> to point to the new model tag</li>
-                  </ol>
+              <div className="space-y-4">
+                {/* HuggingFace Upload */}
+                <div className="space-y-3 rounded-md border p-4">
+                  <p className="text-sm font-medium">Upload Dataset to HuggingFace</p>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs">Dataset file</Label>
+                    <Select
+                      value={hfDataset}
+                      onValueChange={setHfDataset}
+                      disabled={availableDatasets.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={
+                          datasetsLoading ? 'Loading datasets…' :
+                          datasetsError ? 'Error loading datasets' :
+                          availableDatasets.length === 0 ? 'No datasets found — run Phase 3 first' :
+                          'Select a dataset…'
+                        } />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableDatasets.map((d) => (
+                          <SelectItem key={d.filename} value={d.filename}>
+                            {d.filename}
+                            <span className={`ml-2 text-xs font-mono ${
+                              d.entry_count < 200 ? 'text-amber-500' : 'text-muted-foreground'
+                            }`}>
+                              ({d.entry_count} entries{d.entry_count < 200 ? ' ⚠' : ''})
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {datasetsError && (
+                      <p className="text-xs text-red-500">
+                        Could not reach backend: {(datasetsError as Error).message}. Is the server running on port 8010?
+                      </p>
+                    )}
+                    {!datasetsLoading && !datasetsError && availableDatasets.length === 0 && (
+                      <p className="text-xs text-muted-foreground">No generated datasets found. Complete Phase 3 (Dataset Regeneration) first.</p>
+                    )}
+                    {insufficientData && (
+                      <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                        ⚠️ Insufficient data: this dataset has only {selectedDatasetInfo!.entry_count} entries.
+                        At least 200 entries are recommended for effective fine-tuning.
+                        Consider running Phase 3 again with a higher target count.
+                      </div>
+                    )}
+                  </div>
+
+                  <Button
+                    onClick={() => hfUploadMutation.mutate()}
+                    disabled={!hfDataset || hfUploadMutation.isPending}
+                  >
+                    {hfUploadMutation.isPending ? 'Uploading…' : 'Upload to HuggingFace'}
+                  </Button>
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No evolutions applied yet.</p>
-              )}
+
+                {/* Next steps */}
+                {latestEvo && (
+                  <div className="space-y-2 text-sm">
+                    <p className="font-medium">Next steps after upload:</p>
+                    <ol className="list-decimal list-inside space-y-1">
+                      <li>Open the Colab notebook <code className="bg-muted px-1 rounded text-xs">notebooks/gemma_3_4b_student_advisor_v2.ipynb</code></li>
+                      <li>Change <code className="bg-muted px-1 rounded text-xs">my_dataset</code> to point to the uploaded HuggingFace dataset</li>
+                      <li>Run all cells (same LoRA fine-tuning pipeline)</li>
+                      <li>Download the GGUF and register with Ollama:
+                        <code className="block bg-muted px-2 py-1 rounded text-xs mt-1">
+                          ollama create student-advisor:{latestEvo.new_prompt_version} -f Modelfile
+                        </code>
+                      </li>
+                      <li>Update <code className="bg-muted px-1 rounded text-xs">.env</code> to point to the new model tag</li>
+                    </ol>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
 

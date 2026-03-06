@@ -88,3 +88,30 @@ export async function runRegeneration(
   }
   return res.json();
 }
+
+export interface DatasetFile {
+  filename: string;
+  entry_count: number;
+}
+
+export async function listDatasets(): Promise<{ datasets: DatasetFile[] }> {
+  const res = await fetch(ENDPOINTS.EVOLUTION.LIST_DATASETS);
+  if (!res.ok) throw new Error(`Failed to list datasets: ${res.status}`);
+  return res.json();
+}
+
+export async function uploadToHF(
+  filename: string,
+  repoId?: string,
+): Promise<{ status: string; filename: string }> {
+  const res = await fetch(ENDPOINTS.EVOLUTION.UPLOAD_TO_HF, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, repo_id: repoId || null }),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(detail.detail || `Upload failed: ${res.status}`);
+  }
+  return res.json();
+}

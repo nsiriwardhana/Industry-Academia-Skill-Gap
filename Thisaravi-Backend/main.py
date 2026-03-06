@@ -20,6 +20,22 @@ from feedback.storage import log_model_output, get_current_prompt_version
 from feedback.schemas import FeedbackEntry
 from feedback import storage as feedback_storage
 
+import threading
+
+def _trigger_seed_extraction():
+    """Re-extract real seeds from the model output log in a background thread."""
+    try:
+        import importlib.util, os as _os
+        spec = importlib.util.spec_from_file_location(
+            "extract_real_seeds",
+            _os.path.join(_os.path.dirname(__file__), "datasets", "extract_real_seeds.py"),
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod.extract_seeds()
+    except Exception as exc:
+        logger.warning(f"[seed extraction] Failed: {exc}")
+
 # Import service clients
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'clients'))
 from clients import AgentRuntimeClient, RecommendationClient
@@ -412,6 +428,8 @@ async def logging_wrapper(generator, input_data: dict, provider: str):
     try:
         prompt_version = get_current_prompt_version()
         log_model_output(input_data, full_text, provider, prompt_version)
+        # Re-extract real seeds so the dataset stays current after each generation
+        threading.Thread(target=_trigger_seed_extraction, daemon=True).start()
     except Exception as e:
         logger.warning(f"Failed to log model output: {e}")
 
@@ -778,6 +796,65 @@ async def run_regen(req: RegenerationRequest):
         return {"output_path": output_path}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/list-datasets")
+async def list_datasets():
+    """List available generated JSONL dataset files in the datasets/ folder with entry counts."""
+    datasets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "datasets")
+    skip = {"seeds.jsonl", "real_seeds.jsonl", "test_sample.jsonl"}
+    result = []
+    if os.path.isdir(datasets_dir):
+        for fname in sorted(
+            f for f in os.listdir(datasets_dir)
+            if f.endswith(".jsonl") and f not in skip
+        ):
+            fpath = os.path.join(datasets_dir, fname)
+            try:
+                with open(fpath, "r", encoding="utf-8") as fh:
+                    count = sum(1 for line in fh if line.strip())
+            except Exception:
+                count = 0
+            result.append({"filename": fname, "entry_count": count})
+    return {"datasets": result}
+
+
+class HFUploadRequest(BaseModel):
+    filename: str
+    repo_id: Optional[str] = None
+
+
+@app.post("/upload-to-hf")
+async def upload_to_hf(req: HFUploadRequest):
+    """Upload a dataset file to HuggingFace Hub."""
+    datasets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "datasets")
+    file_path = os.path.join(datasets_dir, os.path.basename(req.filename))
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail=f"Dataset file not found: {req.filename}")
+    try:
+        # Use importlib to avoid conflict with the installed HuggingFace `datasets` package
+        import importlib.util
+        _spec = importlib.util.spec_from_file_location(
+            "hf_uploader",
+            os.path.join(datasets_dir, "hf_uploader.py"),
+        )
+        _mod = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        upload_dataset = _mod.upload_dataset
+
+        success = upload_dataset(
+            file_path=file_path,
+            commit_message=f"Upload via frontend: {req.filename}",
+            repo_id=req.repo_id or None,
+        )
+        if success:
+            return {"status": "success", "filename": req.filename}
+        else:
+            raise HTTPException(status_code=500, detail="Upload failed. Check HF_TOKEN in .env.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/jobs-by-role")
