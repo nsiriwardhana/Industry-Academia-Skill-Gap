@@ -75,45 +75,67 @@ function normaliseJson(data: Record<string, unknown>): AnalysisResult | null {
 
 export function parseStructuredText(text: string): AnalysisResult {
   try {
-    // 1. Gap Analysis / Summary
-    const gapMatch = text.match(
-      /(?:Gap Analysis|Analysis)(?:[:\s-]*|\s*\n)([\s\S]*?)(?=(?:\*\*|#|Match Score|Project|Missing Skills|\[Missing))/i
-    );
-    // 2. Match Score
+    // 1. Match Score (do this early — it's unambiguous)
     const scoreMatch = text.match(/(?:Match Score|match_percentage)[^\d]*(\d+)/i);
-    // 3. Missing Skills — handles both "[Missing Skills]:" and "**Missing Skills:**" and list formats
+
+    // 2. Missing Skills — "[Missing Skills]:" or "**Missing Skills:**" etc.
     const missingMatch = text.match(
-      /(?:Missing Skills|Skill Gaps?)(?:\]?\s*[:\-]*\s*|\s*\**\s*[:\-]*\s*)([\s\S]*?)(?=\n\s*\n|\[Match|Match Score|\*\*Match|#|$)/i
+      /(?:\[Missing Skills\]|\*\*Missing Skills\*\*|Missing Skills)\s*[:\-]*\s*([\s\S]*?)(?=\n\s*\n|\[Match|Match Score|\*\*Match|\*\*Objective|\*\*Title|###|$)/i
     );
-    // 4. Project Title
+
+    // 3. Analysis Summary — "[Analysis]:" or "**Analysis:**" or general gap block
+    const analysisMatch = text.match(
+      /(?:\[Analysis\]|\*\*Analysis\*\*|Analysis Summary)\s*[:\-]*\s*([\s\S]*?)(?=\n\s*\n|###|$)/i
+    );
+    // Fallback: grab the Gap Analysis section header content
+    const gapHeaderMatch = !analysisMatch
+      ? text.match(
+          /(?:Gap Analysis)(?:[:\s-]*|\s*\n)([\s\S]*?)(?=###|\*\*Title|\*\*Objective|Project Recommendation|$)/i
+        )
+      : null;
+
+    // 4. Project Title — "**Title:**" or "Project Title:" etc.
     const titleMatch = text.match(
-      /(?:Title|Project Title|Project Recommendation|Recommended Project)[:\s*]*\s*(.+)/i
+      /(?:\*\*Title\*\*|\*\*Project Title\*\*|Project Title|Title)\s*[:\-]*\s*\*{0,2}\s*(.+)/i
     );
-    // 5. Objective
+
+    // 5. Objective — "**Objective:**"
     const objectiveMatch = text.match(
-      /(?:Objective)[:\s*]*\s*(.+)/i
+      /(?:\*\*Objective\*\*|Objective)\s*[:\-]*\s*\*{0,2}\s*(.+)/i
     );
-    // 6. Tech Stack
+
+    // 6. Tech Stack — "**Tech Stack:**" or "Technologies:"
     const stackMatch = text.match(
-      /(?:Tech Stack|Technologies|Stack)(?:[:\s*-]*|\s*\n)([\s\S]*?)(?=(?:\*\*|#|Steps|Implementation)|$)/i
+      /(?:\*\*Tech Stack\*\*|Tech Stack|Technologies|Stack)\s*[:\-]*\s*\*{0,2}\s*([\s\S]*?)(?=\*\*Implementation|\*\*Steps|###|$)/i
     );
-    // 7. Steps / Implementation
+
+    // 7. Implementation Steps — "**Implementation Plan:**" or "**Steps:**"
+    //    Must match "Implementation Plan" as a unit so "Plan:**" isn't left in the capture
     const stepsMatch = text.match(
-      /(?:Steps|Implementation|Plan)(?:[:\s*-]*|\s*\n)([\s\S]*)/i
+      /(?:\*\*Implementation Plan\*\*|\*\*Implementation Steps\*\*|\*\*Implementation\*\*|Implementation Plan|Implementation Steps|Steps)\s*[:\-]*\s*\*{0,2}\s*([\s\S]*)/i
     );
 
     // --- Extract gap summary ---
-    const gapText = gapMatch
-      ? gapMatch[1].replace(/\*\*/g, '').trim()
-      : text.length > 500
-        ? text.slice(0, 500) + '...'
-        : text;
+    let gapText = '';
+    if (analysisMatch) {
+      gapText = analysisMatch[1].replace(/\*\*/g, '').trim();
+    } else if (gapHeaderMatch) {
+      // Strip out [Missing Skills] and [Match Score] lines if they got captured
+      gapText = gapHeaderMatch[1]
+        .replace(/\[Missing Skills\][\s\S]*?(?=\[Analysis\]|\n\s*\n|$)/i, '')
+        .replace(/\[Match Score\][\s\S]*?(?=\[Analysis\]|\n\s*\n|$)/i, '')
+        .replace(/\*\*/g, '')
+        .trim();
+    }
+    if (!gapText) {
+      gapText = text.length > 500 ? text.slice(0, 500) + '...' : text;
+    }
 
     // --- Extract missing skills ---
     const missingSkills: string[] = [];
     if (missingMatch) {
-      const raw = missingMatch[1].trim();
-      raw
+      missingMatch[1]
+        .trim()
         .split(/,|\n/)
         .map((s) => s.replace(/^[-*\s\d.)]+/, '').trim())
         .filter((s) => s.length > 1)
@@ -124,7 +146,7 @@ export function parseStructuredText(text: string): AnalysisResult {
     const rawStack = stackMatch ? stackMatch[1].trim() : '';
     const techStack = rawStack
       .split(/,|;|\band\b|\n\s*[-*]\s*/)
-      .map((s) => s.replace(/^[-*\s]+/, '').trim())
+      .map((s) => s.replace(/^[-*\s]+/, '').replace(/\*\*/g, '').trim())
       .filter(Boolean);
 
     // --- Extract steps ---
@@ -132,7 +154,13 @@ export function parseStructuredText(text: string): AnalysisResult {
     const stepsNormalized = rawSteps.replace(/\r\n/g, '\n');
     const steps = stepsNormalized
       .split(/\n\s*(?:\d+[.):\s]\s+|Step\s+\d+[.:)?\s]\s*|[-*]\s+)/)
-      .map((s) => s.replace(/^(?:Step\s*)?\d+[.):\s]\s*/i, '').trim())
+      .map((s) => s
+        .replace(/^(?:Step\s*)?\d+[.):\s]\s*/i, '')  // strip leading number
+        .replace(/^\*\*/, '')                          // strip leading **
+        .replace(/\*\*[:\s]*$/, '')                    // strip trailing **: 
+        .replace(/\*\*/g, '')                          // strip remaining **
+        .trim()
+      )
       .filter((s) => s.length > 5);
 
     // --- Extract project title ---
