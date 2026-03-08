@@ -27,4 +27,6 @@ seaborn
 
 python-dotenv
 
-# cd backend\src; & ..\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# To run the server:
+# cd Nipuni_backend\src
+# python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000

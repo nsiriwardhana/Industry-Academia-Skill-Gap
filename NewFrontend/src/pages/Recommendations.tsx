@@ -2,6 +2,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import QuickActions from "@/components/QuickActions";
 import { ArrowLeft, ExternalLink, Star, BookOpen, CheckCircle2, AlertCircle, Sparkles } from "lucide-react";
 import { getCourseRecommendations, type CourseRecommendation } from "@/services/courseService";
 
@@ -278,6 +279,9 @@ const Recommendations = () => {
             </Button>
           </div>
         )}
+
+        {/* Quick Actions */}
+        <QuickActions />
       </main>
     </div>
   );

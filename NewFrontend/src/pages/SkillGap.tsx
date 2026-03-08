@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { XAIExplanation } from "@/components/XAIExplanation";
+import QuickActions from "@/components/QuickActions";
 import { ArrowLeft, ArrowRight, AlertTriangle, CheckCircle2, TrendingUp, Target, BookOpen, Award, Briefcase, Code, ExternalLink, Star } from "lucide-react";
 import { getCourseRecommendations, getCourseRecommendationsForJobGap, type CourseRecommendation } from "@/services/courseService";
 
@@ -358,13 +359,14 @@ const SkillGap = () => {
                 </div>
 
                 <div className="space-y-3">
-                  <div>
+                  {/* Current Level - Commented out since Skills to Develop only shows missing skills (p_has < 0.6) */}
+                  {/* <div>
                     <div className="flex items-center justify-between text-sm mb-1">
                       <span className="text-muted-foreground">Current Level</span>
                       <span className="text-foreground font-medium">{skillGap.currentLevel}%</span>
                     </div>
                     <Progress value={skillGap.currentLevel} className="h-2" />
-                  </div>
+                  </div> */}
                   
                   <div>
                     <div className="flex items-center justify-between text-sm mb-1">
@@ -570,6 +572,9 @@ const SkillGap = () => {
             <ArrowRight className="w-5 h-5" />
           </Button>
         </div>
+
+        {/* Quick Actions */}
+        <QuickActions />
       </main>
     </div>
   );

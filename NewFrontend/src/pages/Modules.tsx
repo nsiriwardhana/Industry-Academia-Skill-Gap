@@ -58,7 +58,7 @@ const Modules = () => {
       gradient: "pipeline-stage-2"
     },
     {
-      title: "Industry Connect Portal",
+      title: "AI-Driven Project Recommendation​",
       description: "Connect directly with industry professionals, mentors, and companies for networking and opportunities.",
       icon: LinkIcon,
       features: [

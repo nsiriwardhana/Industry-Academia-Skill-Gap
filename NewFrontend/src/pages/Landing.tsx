@@ -25,7 +25,7 @@ const Landing = () => {
     },
     {
       icon: Target,
-      title: "Skill Gap Detection",
+      title: "Voice Bot Interview Prep",
       description: "Precisely identify gaps between current skills and target role requirements with explainable insights.",
     },
     {
@@ -35,7 +35,7 @@ const Landing = () => {
     },
     {
       icon: Lightbulb,
-      title: "Explainable AI",
+      title: "AI-Driven Project Recommendation​",
       description: "Transparent reasoning behind every recommendation, ensuring trust and actionable insights.",
     },
   ];

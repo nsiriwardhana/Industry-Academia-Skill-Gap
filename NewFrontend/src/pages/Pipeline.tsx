@@ -137,8 +137,24 @@ const Pipeline = () => {
           
         } else if (type === 'job-based') {
           if (!jobFile) throw new Error("No job description file provided");
+          if (!cvFile) throw new Error("No CV file provided for job-based analysis");
           
-          // Simulate progress through first 3 stages
+          // Stage 1-3: Parse CV first using Agent Runtime
+          console.log(`🚀 Step 1: Parsing CV from PDF: ${cvFile.name}`);
+          // Use a temporary role just to parse the CV and get candidate data
+          const tempResults = await runAgentPipelineFromPDF(cvFile, 'ai_ml_engineer', 10, false);
+          console.log("✅ CV parsed, candidate_id:", tempResults.candidate_id);
+          
+          // Extract candidate data we need for job gap analysis
+          const candidateData = {
+            candidate_id: tempResults.candidate_id,
+            candidate_name: tempResults.candidate_name || "Unknown",
+            skills: tempResults.skill_confidence_top?.map((s: any) => ({
+              name: s.skill_name,
+              proficiency: s.confidence > 0.8 ? "advanced" : s.confidence > 0.6 ? "intermediate" : "beginner"
+            })) || []
+          };
+          
           for (let i = 0; i < 3; i++) {
             await new Promise(resolve => setTimeout(resolve, 300));
             setCompletedStages(prev => [...prev, pipelineStages[i].id]);
@@ -146,9 +162,9 @@ const Pipeline = () => {
           }
 
           // Stage 4: Job Gap Analysis
-          console.log(`🚀 Running job-gap analysis...`);
+          console.log(`🚀 Step 2: Running job-gap analysis with parsed candidate data...`);
           const jobGapData = await analyzeJobGap(
-            JSON.stringify(profile),
+            JSON.stringify(candidateData),
             jobFile,
             storeInGraph || false,
             25
