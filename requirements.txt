@@ -1,70 +1,92 @@
-# FastAPI & Server
+# ============================================================================
+# SkillScope - Unified Requirements
+# All dependencies for all services in one file (no version pinning)
+# ============================================================================
+
+# ============================================================================
+# Core Web Framework & Server
+# ============================================================================
 fastapi
 uvicorn[standard]
 python-multipart
 
+# ============================================================================
 # Authentication & Security
+# ============================================================================
 authlib
 httpx
 python-jose[cryptography]
 passlib[bcrypt]
 email-validator
+cryptography
 
-# Database
+# ============================================================================
+# Database & ORM
+# ============================================================================
 sqlalchemy
+pydantic
+pydantic-settings
 pymysql
-alembic
 neo4j
+alembic
 
-# Environment
+# ============================================================================
+# Environment & Configuration
+# ============================================================================
 python-dotenv
+python-dateutil
 
-# Data Processing
-pandas
-numpy
-
-# Machine Learning
-scikit-learn
-xgboost
-torch
-torch-geometric
-transformers
-peft
-accelerate
-shap
-joblib
-
-# NLP / LLM / RAG
-openai
-google-genai
-langchain
-langchain-google-genai
-sentence-transformers
-faiss-cpu
-chromadb
-
-# File Handling & PDFs
+# ============================================================================
+# PDF & Document Processing
+# ============================================================================
 PyPDF2
 pdfplumber
 PyMuPDF
 pdf2image
-
-# Image Processing & OCR
-Pillow
 pytesseract
-easyocr
+Pillow
 
-# Utilities
+# ============================================================================
+# LLM & NLP Integration
+# ============================================================================
+openai
+google-genai
 requests
 urllib3
-python-dateutil
-python-magic
-tqdm
+langchain
+langchain-google-genai
+transformers
+peft
+accelerate
 
-# Visualization
+# ============================================================================
+# Machine Learning & Data Science
+# ============================================================================
+torch
+torch-geometric
+numpy
+pandas
+scikit-learn
+xgboost
+shap
+joblib
 matplotlib
 seaborn
 
-# Config Management
-pydantic
-pydantic-settings
+# ============================================================================
+# OCR & Image Processing
+# ============================================================================
+easyocr
+
+# ============================================================================
+# Vector Search & Embeddings
+# ============================================================================
+sentence-transformers
+chromadb
+faiss-cpu
+
+# ============================================================================
+# Utilities
+# ============================================================================
+python-magic
+tqdm

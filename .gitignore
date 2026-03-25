@@ -1,4 +1,4 @@
-# Root .gitignore for the CV Parser Agent monorepo
+# Root .gitignore for the SkillScope project
 
 # --- Python artifacts ---
 __pycache__/
@@ -25,9 +25,13 @@ wheels/
 pip-wheel-metadata/
 
 # Environment variable / secrets
+# Using centralized .env at root level - all services read from here
+# Individual .env files in service folders are deprecated and ignored
 .env
 .env.*
 .env.local
+**/.env
+**/.env.*
 
 # IDEs / editors
 .vscode/

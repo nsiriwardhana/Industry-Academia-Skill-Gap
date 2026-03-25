@@ -3,8 +3,8 @@ from dotenv import load_dotenv
 import os
 from pathlib import Path
 
-# Load .env from app directory
-env_path = Path(__file__).resolve().parent.parent / ".env"
+# Load .env from root directory (4 levels up: app/core/config.py)
+env_path = Path(__file__).resolve().parent.parent.parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 MAX_QUESTIONS = 7
