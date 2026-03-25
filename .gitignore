@@ -1,4 +1,4 @@
-# Root .gitignore for the CV Parser Agent monorepo
+# Root .gitignore for the SkillScope project
 
 # --- Python artifacts ---
 __pycache__/
@@ -25,9 +25,13 @@ wheels/
 pip-wheel-metadata/
 
 # Environment variable / secrets
+# Using centralized .env at root level - all services read from here
+# Individual .env files in service folders are deprecated and ignored
 .env
 .env.*
 .env.local
+**/.env
+**/.env.*
 
 # IDEs / editors
 .vscode/
@@ -100,8 +104,9 @@ _build/
 
 # Allow small, explicit files if necessary via .gitignore exceptions (add e.g. "!data/small_example.csv")
 
-# --- AI Explanation (Agent-Runtime) ---
-Agent-Runtime/AI Explanation/qwen-explainer-output/
+# --- AI Explanation Folder (Large ML models - don't commit) ---
+AI Explanation/
+AI Explanation/**
 
 # --- GNN Link Prediction (Advanced-Recommendation-System) ---
 Advanced-Recommendation-System/GNN-Link-Prediction/models/

@@ -2,9 +2,13 @@
 Configuration settings for Agent Runtime Backend.
 """
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load environment variables from root .env file
+# Search up to root .env (3 levels up from settings.py: config/settings.py)
+env_path = Path(__file__).parent.parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 # Neo4j Configuration
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
