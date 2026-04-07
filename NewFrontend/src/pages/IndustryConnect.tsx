@@ -22,7 +22,6 @@ import { useStreaming } from '@/hooks/use-streaming-ic';
 import { useModelSettings } from '@/hooks/use-model-settings-ic';
 import { useRoles } from '@/hooks/use-roles-ic';
 import { useJobsByRole } from '@/hooks/use-jobs-by-role-ic';
-import { TEST_PROFILE } from '@/config/testProfiles';
 import { generateProject } from '@/services/industryConnectService';
 import type { CombinedSourceRequest, LinkedInJobResult } from '@/types/industryConnect';
 
@@ -72,12 +71,6 @@ const IndustryConnect = () => {
       target_role: '',
     },
   });
-
-  const loadTestProfile = () => {
-    form.setValue('target_role', TEST_PROFILE.target_role);
-    setRoleSelectValue('__other__');
-    setSelectedJob(null);
-  };
 
   const { streamingText, parsedResult, isStreaming, error, startStream } = useStreaming();
 
@@ -146,8 +139,8 @@ const IndustryConnect = () => {
 
           <div>
             <div className="flex justify-end mb-4">
-              <Button type="button" variant="outline" size="sm" onClick={loadTestProfile}>
-                Load Test Profile
+              <Button asChild type="button" variant="outline" size="sm">
+                <Link to="/industry-connect/history">View History</Link>
               </Button>
             </div>
 
