@@ -26,6 +26,10 @@ import {
   CheckCircle,
   Trash2,
   Loader2,
+  MessageSquare,
+  Bot,
+  Settings2,
+  UserCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -67,6 +71,33 @@ const AdminDashboard = () => {
   const [statsLoading, setStatsLoading] = useState(true);
   const [usersLoading, setUsersLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const quickLinks = [
+    {
+      title: "Expert Feedback",
+      description: "Open pending expert reviews",
+      icon: MessageSquare,
+      path: "/admin/expert/feedback",
+    },
+    {
+      title: "Prompt Evolution",
+      description: "Run and monitor evolution phases",
+      icon: Bot,
+      path: "/admin/expert/evolution",
+    },
+    {
+      title: "Model Settings",
+      description: "Manage provider configuration",
+      icon: Settings2,
+      path: "/admin/expert/settings",
+    },
+    {
+      title: "User Management",
+      description: "Jump to the user table",
+      icon: UserCircle2,
+      path: "#user-management",
+    },
+  ];
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem("admin_token");
@@ -326,8 +357,46 @@ const AdminDashboard = () => {
           )}
         </div>
 
+        {/* Quick Navigation */}
+        <Card className="bg-slate-900/50 border-slate-800 mb-8">
+          <CardHeader>
+            <CardTitle className="text-white">Admin Navigation</CardTitle>
+            <CardDescription className="text-slate-400">
+              Quick access to expert pages and management tools
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {quickLinks.map((link) => {
+                const Icon = link.icon;
+                return (
+                  <button
+                    key={link.title}
+                    type="button"
+                    onClick={() => {
+                      if (link.path.startsWith("#")) {
+                        const target = document.querySelector(link.path);
+                        target?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        return;
+                      }
+                      navigate(link.path);
+                    }}
+                    className="text-left rounded-xl border border-slate-800 bg-slate-950/60 hover:bg-slate-800/60 transition-colors p-4"
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-cyan-500/15 text-cyan-300 flex items-center justify-center mb-3">
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <p className="text-white font-semibold text-sm">{link.title}</p>
+                    <p className="text-slate-400 text-xs mt-1">{link.description}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Users Table */}
-        <Card className="bg-slate-900/50 border-slate-800">
+        <Card id="user-management" className="bg-slate-900/50 border-slate-800">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
