@@ -75,10 +75,9 @@ const IndustryConnect = () => {
   const { streamingText, parsedResult, isStreaming, error, startStream } = useStreaming();
 
   const onSubmit = (data: AnalysisFormValues) => {
-    const jobDescription =
-      selectedJob?.description_summary ??
-      selectedJob?.description?.substring(0, 500) ??
-      `Targeting a role as ${data.target_role}`;
+    const targetRole = data.target_role.trim() || selectedJob?.title || 'Target Role';
+    const safeRequiredSkills = normalizeListField(selectedJob?.skills ?? []).slice(0, 15);
+    const jobDescription = `Targeting a role as ${targetRole}`;
 
     const request: CombinedSourceRequest = {
       inline_student_data: {
@@ -91,11 +90,11 @@ const IndustryConnect = () => {
         experience_summary: 'N/A',
       },
       inline_job_data: {
-        role: data.target_role,
-        required_skills: selectedJob?.skills ?? [],
+        role: targetRole,
+        required_skills: safeRequiredSkills,
         description_summary: jobDescription,
       },
-      target_role: data.target_role,
+      target_role: targetRole,
       role_key: activeRoleKey ?? undefined,
       model_provider: modelSettings.model_provider,
     };

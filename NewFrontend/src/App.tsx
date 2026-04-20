@@ -18,6 +18,9 @@ import Profile from "./pages/Profile";
 import CourseRecommendations from "./pages/CourseRecommendations";
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
+import AdminUserDetails from "./pages/admin/AdminUserDetails";
+import AdminExpertFeedback from "./pages/admin/AdminExpertFeedback";
+import AdminEvolution from "./pages/admin/AdminEvolution";
 import {
   TranscriptUploadPage,
   TranscriptDetailsPage,
@@ -245,6 +248,10 @@ const App = () => (
             {/* Admin Routes - No AuthProvider protection, uses separate admin auth */}
             <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            <Route path="/admin/users/:userId" element={<AdminUserDetails />} />
+            <Route path="/admin/expert/feedback" element={<AdminExpertFeedback />} />
+            <Route path="/admin/expert/evolution" element={<AdminEvolution />} />
+            <Route path="/admin/expert/settings" element={<IndustryConnectSettings />} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict
 import google.genai as genai
-import ollama
+import thisaravi
 
 from neo4j import GraphDatabase
 
@@ -518,6 +518,53 @@ def _extract_match_score_value(text: str) -> Optional[str]:
     return None
 
 
+def _extract_canonical_payload_input(model_input: dict) -> dict:
+    """
+    Extract canonical finetuned input shape from logged model_input payload.
+
+    Supports the current shape (messages at root) and previous compatibility
+    shapes where the payload was stored under pre_generation_payload.
+    """
+    candidates = []
+
+    if isinstance(model_input, dict):
+        if isinstance(model_input.get("messages"), list):
+            candidates.append({"messages": model_input.get("messages")})
+
+        pre_generation = model_input.get("pre_generation_payload")
+        if isinstance(pre_generation, dict):
+            candidates.append(pre_generation)
+
+    for candidate in candidates:
+        messages = candidate.get("messages", [])
+        if not isinstance(messages, list) or len(messages) != 1:
+            continue
+        content = messages[0].get("content", "")
+        if not isinstance(content, str):
+            continue
+        try:
+            parsed = json.loads(content)
+        except Exception:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+
+    # Legacy fallback for older logs that stored student_data/job_data directly.
+    if isinstance(model_input, dict):
+        student_data = model_input.get("student_data")
+        job_data = model_input.get("job_data")
+        if isinstance(student_data, dict) and isinstance(job_data, dict):
+            return {
+                "student_data": student_data,
+                "job_data": job_data,
+            }
+
+    return {
+        "student_data": {},
+        "job_data": {},
+    }
+
+
 async def ensure_match_score_tag(generator):
     """Pass-through stream and append [Match Score] for non-error outputs when missing."""
     full_text = ""
@@ -559,6 +606,8 @@ async def run_enriched_ollama(
     recommendation_results: dict,
     model_provider: str,
     ollama_model: str = None,
+    use_finetuned_payload: bool = False,
+    finetuned_payload: Optional[dict] = None,
 ):
     """
     Stream Ollama output enriched with recommendation engine data.
@@ -573,14 +622,16 @@ async def run_enriched_ollama(
     else:
         model_id = ollama_model or DEFAULT_OLLAMA_FINE_TUNED
 
-    is_finetuned = (model_id == DEFAULT_OLLAMA_FINE_TUNED)
-
-    if is_finetuned:
+    if use_finetuned_payload:
         # Exact training-shape payload: {"messages":[{"role":"user","content":"{...}"}]}
-        from input_normalizer import build_finetuned_chat_payload
-        payload = build_finetuned_chat_payload(
-            student_data, job_data, target_role, recommendation_results,
-        )
+        if finetuned_payload is None:
+            from input_normalizer import build_finetuned_chat_payload
+            payload = build_finetuned_chat_payload(
+                student_data, job_data, target_role, recommendation_results,
+            )
+        else:
+            payload = finetuned_payload
+
         logger.info("Final finetuned model payload: %s", json.dumps(payload, ensure_ascii=False))
         messages = payload["messages"]
     else:
@@ -595,7 +646,7 @@ async def run_enriched_ollama(
 
     def _stream():
         try:
-            stream = ollama.chat(
+            stream = thisaravi.chat(
                 model=model_id,
                 messages=messages,
                 stream=True,
@@ -839,7 +890,17 @@ async def generate_project_from_sources(req: CombinedSourceRequest):
 
         # ── 6. Stream enriched LLM output ────────────────────────────────
         logger.info(f"Generating enriched plan for {candidate_id} -> {target_role} via {req.model_provider}")
-        model_input_payload = None
+        resolved_model_id = None
+
+        from input_normalizer import build_finetuned_chat_payload
+        canonical_finetuned_payload = build_finetuned_chat_payload(
+            student_data,
+            job_data_obj,
+            target_role,
+            results,
+        )
+        canonical_input = _extract_canonical_payload_input(canonical_finetuned_payload)
+        use_finetuned_payload = req.model_provider == "ollama"
 
         if req.model_provider == "gemini":
             generator = run_enriched_gemini(
@@ -849,45 +910,41 @@ async def generate_project_from_sources(req: CombinedSourceRequest):
             resolved_model_id = req.ollama_model or (
                 DEFAULT_OLLAMA_GENERIC if req.model_provider == "ollama_generic" else DEFAULT_OLLAMA_FINE_TUNED
             )
-            if resolved_model_id == DEFAULT_OLLAMA_FINE_TUNED:
-                from input_normalizer import build_finetuned_chat_payload
-                model_input_payload = build_finetuned_chat_payload(
-                    student_data,
-                    job_data_obj,
-                    target_role,
-                    results,
-                )
+
+            if use_finetuned_payload:
                 logger.info(
                     "Pre-generation finetuned payload: %s",
-                    json.dumps(model_input_payload, ensure_ascii=False),
+                    json.dumps(canonical_finetuned_payload, ensure_ascii=False),
                 )
 
             generator = run_enriched_ollama(
                 student_data, job_data_obj, target_role, results,
                 model_provider=req.model_provider,
                 ollama_model=req.ollama_model,
+                use_finetuned_payload=use_finetuned_payload,
+                finetuned_payload=canonical_finetuned_payload if use_finetuned_payload else None,
             )
 
         input_data = {
-            "student_data": {
-                "demographics": f"{student_data.name}, {student_data.current_role}",
-                "major": student_data.major,
-                "interests": student_data.interests,
-                "current_skills": student_data.skills,
-                "personality": student_data.personality,
-            },
-            "job_data": {
-                "target_job_role": target_role,
-                "required_skills": job_data_obj.required_skills,
-                "description": job_data_obj.description_summary,
-            },
+            "schema_version": "finetuned_v1",
+            "student_name": student_data.name,
+            "messages": canonical_finetuned_payload.get("messages", []),
+            "student_data": canonical_input.get("student_data", {}),
+            "job_data": canonical_input.get("job_data", {}),
             "recommendation_context": {
                 "skill_gap_count": len(results.get("skill_gap", {}).get("deficits", [])),
                 "course_count": len(results.get("recommendations", {}).get("recommendations", [])),
                 "has_project_relevance": "project_relevance" in results,
                 "has_gnn": bool(results.get("missing_skills_gnn", {}).get("gnn_available")),
             },
-            "pre_generation_payload": model_input_payload,
+            "runtime": {
+                "target_role": target_role,
+                "model_provider": req.model_provider,
+                "resolved_model_id": resolved_model_id,
+                "used_finetuned_payload": use_finetuned_payload,
+            },
+            # Compatibility field for existing tooling that still reads this key.
+            "pre_generation_payload": canonical_finetuned_payload,
         }
 
         generator = ensure_match_score_tag(generator)
@@ -970,9 +1027,9 @@ async def get_my_outputs(student_name: str):
     Return all model outputs for a specific student, together with any
     expert feedback that was given on each output.
 
-    Matching strategy: the ``model_input.student_data.demographics`` field
-    stores ``"{name}, {role}"`` – we accept a match if the demographics string
-    starts with the requested name (case-insensitive).
+    Matching strategy:
+    1) Prefer explicit model_input.student_name (new logs)
+    2) Fallback to legacy model_input.student_data.demographics prefix matching
     """
     name_lower = student_name.strip().lower()
 
@@ -980,12 +1037,16 @@ async def get_my_outputs(student_name: str):
     all_outputs = feedback_storage.load_all_outputs()
     student_outputs = []
     for out in all_outputs:
+        model_input = out.get("model_input", {})
+        logged_name = str(model_input.get("student_name", "")).strip().lower()
+
         demographics = (
-            out.get("model_input", {})
-               .get("student_data", {})
-               .get("demographics", "")
+            model_input
+                .get("student_data", {})
+                .get("demographics", "")
         )
-        if demographics.lower().startswith(name_lower):
+
+        if (logged_name and logged_name == name_lower) or demographics.lower().startswith(name_lower):
             student_outputs.append(out)
 
     # ── 2. Build a lookup: model_output text → feedback entry ─────────────
