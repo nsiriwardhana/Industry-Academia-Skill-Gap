@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -15,8 +15,12 @@ export default function IndustryConnectSettings() {
   const { settings, saveSettings } = useModelSettings();
   const [draft, setDraft] = useState<ModelSettings>(settings);
 
+  useEffect(() => {
+    setDraft(settings);
+  }, [settings.model_provider, settings.ollama_model]);
+
   const handleSave = () => {
-    saveSettings(draft);
+    saveSettings({ ...draft, ollama_model: draft.ollama_model.trim() });
     toast.success('Settings saved');
   };
 
@@ -44,12 +48,13 @@ export default function IndustryConnectSettings() {
               <Label className="text-sm font-medium">Model Provider</Label>
               <RadioGroup
                 value={draft.model_provider}
-                onValueChange={(val) =>
+                onValueChange={(val) => {
+                  const nextProvider = val as ModelSettings['model_provider'];
                   setDraft((d) => ({
                     ...d,
-                    model_provider: val as ModelSettings['model_provider'],
-                  }))
-                }
+                    model_provider: nextProvider,
+                  }));
+                }}
                 className="space-y-2"
               >
                 {MODEL_PROVIDERS.map((p) => (
@@ -108,7 +113,7 @@ export default function IndustryConnectSettings() {
             <Separator />
 
             <Button onClick={handleSave} disabled={!hasChanges}>
-              Save Settings
+              Save Changes
             </Button>
             {!hasChanges && (
               <p className="text-xs text-muted-foreground">No unsaved changes.</p>

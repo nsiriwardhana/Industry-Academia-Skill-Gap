@@ -28,6 +28,20 @@ interface UnreviewedOutput {
   model_output?: string;
 }
 
+interface ReviewedFeedback {
+  feedback_id?: string;
+  timestamp?: string;
+  model_provider?: string;
+  prompt_version?: string;
+  model_input?: UnreviewedOutput["model_input"];
+  model_output?: string;
+  free_text_comments?: string;
+  reviewer_id?: string | null;
+  ratings?: FeedbackDraft["ratings"];
+}
+
+type QueueView = "unreviewed" | "reviewed";
+
 interface FeedbackStatus {
   total_outputs: number;
   reviewed_outputs: number;
@@ -83,18 +97,27 @@ function formatDate(value?: string) {
   }
 }
 
-function resolveStudentName(item: UnreviewedOutput) {
+function resolveStudentName(item: { model_input?: UnreviewedOutput["model_input"] }) {
   return item.model_input?.student_name || item.model_input?.student_data?.demographics || "Unknown";
 }
 
-function resolveTargetRole(item: UnreviewedOutput) {
+function resolveTargetRole(item: { model_input?: UnreviewedOutput["model_input"] }) {
   return item.model_input?.job_data?.target_job_role || "Unknown Role";
+}
+
+function getAverageRating(ratings: FeedbackDraft["ratings"]) {
+  const values = Object.values(ratings);
+  if (values.length === 0) return "N/A";
+  const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return avg.toFixed(1);
 }
 
 export default function AdminExpertFeedback() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<FeedbackStatus>(initialStatus);
   const [outputs, setOutputs] = useState<UnreviewedOutput[]>([]);
+  const [reviewedFeedback, setReviewedFeedback] = useState<ReviewedFeedback[]>([]);
+  const [queueView, setQueueView] = useState<QueueView>("unreviewed");
   const [loading, setLoading] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Record<string, FeedbackDraft>>({});
@@ -112,9 +135,10 @@ export default function AdminExpertFeedback() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [statusResponse, outputsResponse] = await Promise.all([
+      const [statusResponse, outputsResponse, reviewedResponse] = await Promise.all([
         fetch(`${EXPERT_API_URL}/feedback-status`),
         fetch(`${EXPERT_API_URL}/unreviewed-outputs`),
+        fetch(`${EXPERT_API_URL}/all-feedback`),
       ]);
 
       if (!statusResponse.ok) {
@@ -123,12 +147,17 @@ export default function AdminExpertFeedback() {
       if (!outputsResponse.ok) {
         throw new Error("Failed to fetch unreviewed outputs");
       }
+      if (!reviewedResponse.ok) {
+        throw new Error("Failed to fetch reviewed feedback");
+      }
 
       const statusData = await statusResponse.json();
       const outputsData = await outputsResponse.json();
+      const reviewedData = await reviewedResponse.json();
       const list: UnreviewedOutput[] = Array.isArray(outputsData) ? outputsData : [];
+      const reviewedList: ReviewedFeedback[] = Array.isArray(reviewedData) ? reviewedData : [];
 
-      const reviewedOutputs = Number(statusData.reviewed_outputs ?? statusData.total_feedback ?? 0);
+      const reviewedOutputs = Number(statusData.reviewed_outputs ?? statusData.total_feedback ?? reviewedList.length);
       const unreviewedOutputs = Number(statusData.unreviewed_outputs ?? list.length ?? 0);
       const totalOutputs = Number(statusData.total_outputs ?? (reviewedOutputs + unreviewedOutputs));
       const coveragePercent =
@@ -142,6 +171,7 @@ export default function AdminExpertFeedback() {
         review_coverage_percent: coveragePercent,
       });
       setOutputs(list);
+      setReviewedFeedback(reviewedList);
 
       setDrafts((prev) => {
         const next = { ...prev };
@@ -172,6 +202,14 @@ export default function AdminExpertFeedback() {
       return tb - ta;
     });
   }, [outputs]);
+
+  const orderedReviewed = useMemo(() => {
+    return [...reviewedFeedback].sort((a, b) => {
+      const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return tb - ta;
+    });
+  }, [reviewedFeedback]);
 
   const toggleExpanded = (outputId: string) => {
     ensureDraft(outputId);
@@ -278,13 +316,39 @@ export default function AdminExpertFeedback() {
                     <p className="text-2xl font-bold text-white">{status.total_outputs}</p>
                   </CardContent>
                 </Card>
-                <Card className="bg-slate-950/70 border-slate-800">
+                <Card
+                  className={`bg-slate-950/70 border-slate-800 transition cursor-pointer ${
+                    queueView === "reviewed" ? "ring-1 ring-emerald-500/70 border-emerald-500/60" : "hover:border-emerald-500/40"
+                  }`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setQueueView("reviewed")}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setQueueView("reviewed");
+                    }
+                  }}
+                >
                   <CardContent className="pt-5">
                     <p className="text-xs text-slate-400">Reviewed</p>
                     <p className="text-2xl font-bold text-emerald-400">{status.reviewed_outputs}</p>
                   </CardContent>
                 </Card>
-                <Card className="bg-slate-950/70 border-slate-800">
+                <Card
+                  className={`bg-slate-950/70 border-slate-800 transition cursor-pointer ${
+                    queueView === "unreviewed" ? "ring-1 ring-amber-500/70 border-amber-500/60" : "hover:border-amber-500/40"
+                  }`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setQueueView("unreviewed")}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setQueueView("unreviewed");
+                    }
+                  }}
+                >
                   <CardContent className="pt-5">
                     <p className="text-xs text-slate-400">Awaiting Review</p>
                     <p className="text-2xl font-bold text-amber-400">{status.unreviewed_outputs}</p>
@@ -303,9 +367,13 @@ export default function AdminExpertFeedback() {
 
         <Card className="bg-slate-900/50 border-slate-800">
           <CardHeader>
-            <CardTitle className="text-white">Unreviewed Analysis Queue</CardTitle>
+            <CardTitle className="text-white">
+              {queueView === "reviewed" ? "Reviewed Recommendations" : "Unreviewed Analysis Queue"}
+            </CardTitle>
             <CardDescription className="text-slate-400">
-              Analysis is shown partially by default. Open each card to inspect full output and submit feedback.
+              {queueView === "reviewed"
+                ? "Click any reviewed item to inspect the recommendations, ratings, and expert notes already submitted."
+                : "Analysis is shown partially by default. Open each card to inspect full output and submit feedback."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -313,6 +381,83 @@ export default function AdminExpertFeedback() {
               <div className="py-6 flex justify-center">
                 <Loader2 className="w-6 h-6 text-cyan-400 animate-spin" />
               </div>
+            ) : queueView === "reviewed" ? (
+              orderedReviewed.length === 0 ? (
+                <p className="text-slate-400">No reviewed recommendations yet.</p>
+              ) : (
+                orderedReviewed.map((item, index) => {
+                  const feedbackId = item.feedback_id || `review-${index}`;
+                  const parsed = parseResponse(item.model_output || "");
+                  const ratings = item.ratings || defaultDraft.ratings;
+
+                  return (
+                    <div key={feedbackId} className="rounded-lg border border-slate-800 bg-slate-950/60 p-4 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-white font-semibold">{resolveTargetRole(item)}</p>
+                          <p className="text-xs text-slate-400">{resolveStudentName(item)}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="border-slate-700 text-slate-300">
+                            {item.model_provider || "unknown"}
+                          </Badge>
+                          {item.prompt_version && (
+                            <Badge variant="secondary" className="bg-slate-800 text-slate-200">
+                              {item.prompt_version}
+                            </Badge>
+                          )}
+                          <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
+                            Avg Rating: {getAverageRating(ratings)}/5
+                          </Badge>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-400">Reviewed on {formatDate(item.timestamp)}</p>
+
+                      <div className="rounded-md border border-slate-800 bg-slate-900/50 p-4 space-y-3">
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-slate-400 mb-1">Project Recommendation</p>
+                          <p className="text-white font-medium mb-1">{parsed.project_recommendation.project_title || "N/A"}</p>
+                          <p className="text-sm text-slate-300">{parsed.project_recommendation.objective || "N/A"}</p>
+                        </div>
+
+                        {parsed.project_recommendation.implementation_steps.length > 0 && (
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-slate-400 mb-1">Implementation Steps</p>
+                            <ol className="list-decimal list-inside text-sm text-slate-300 space-y-1">
+                              {parsed.project_recommendation.implementation_steps.map((step, stepIdx) => (
+                                <li key={`${feedbackId}-step-${stepIdx}`}>{step}</li>
+                              ))}
+                            </ol>
+                          </div>
+                        )}
+
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">Expert Ratings</p>
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            <Badge variant="outline" className="border-slate-700 text-slate-200">Skill Gap: {ratings.skill_gap_accuracy}/5</Badge>
+                            <Badge variant="outline" className="border-slate-700 text-slate-200">Project: {ratings.project_relevance}/5</Badge>
+                            <Badge variant="outline" className="border-slate-700 text-slate-200">Tech Stack: {ratings.tech_stack_appropriateness}/5</Badge>
+                            <Badge variant="outline" className="border-slate-700 text-slate-200">Steps: {ratings.implementation_step_quality}/5</Badge>
+                            <Badge variant="outline" className="border-slate-700 text-slate-200">Overall: {ratings.overall_quality}/5</Badge>
+                          </div>
+                        </div>
+
+                        {item.free_text_comments && (
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-slate-400 mb-1">Expert Comments</p>
+                            <p className="text-sm text-slate-200 whitespace-pre-wrap">{item.free_text_comments}</p>
+                          </div>
+                        )}
+
+                        {item.reviewer_id && (
+                          <p className="text-xs text-slate-400">Reviewer: {item.reviewer_id}</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )
             ) : orderedUnreviewed.length === 0 ? (
               <p className="text-slate-400">No pending outputs. Everything is reviewed.</p>
             ) : (

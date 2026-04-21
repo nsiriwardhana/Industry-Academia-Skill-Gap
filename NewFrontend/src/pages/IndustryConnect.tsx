@@ -97,6 +97,10 @@ const IndustryConnect = () => {
       target_role: targetRole,
       role_key: activeRoleKey ?? undefined,
       model_provider: modelSettings.model_provider,
+      ollama_model:
+        modelSettings.model_provider === 'ollama_generic'
+          ? (modelSettings.ollama_model?.trim() || undefined)
+          : undefined,
     };
     startStream((signal) => generateProject(request, signal));
   };

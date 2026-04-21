@@ -476,6 +476,25 @@ export default function AdminEvolution() {
 
         <Card className="bg-slate-900/50 border-slate-800">
           <CardHeader>
+            <CardTitle className="text-white">Current Prompt</CardTitle>
+            <CardDescription className="text-slate-400">
+              Active prompt version currently used by the expert pipeline.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Badge variant="secondary" className="bg-slate-800 text-slate-200">
+              Version: {promptData?.version || "N/A"}
+            </Badge>
+            <div className="rounded-md border border-slate-800 bg-slate-950/70 p-4 max-h-64 overflow-auto">
+              <p className="text-sm text-slate-300 whitespace-pre-wrap">
+                {promptData?.prompt || "Prompt not available"}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-900/50 border-slate-800">
+          <CardHeader>
             <CardTitle className="text-white">Regeneration + Datasets</CardTitle>
             <CardDescription className="text-slate-400">
               Regenerate datasets from an evolution and upload generated files to Hugging Face.
@@ -569,24 +588,6 @@ export default function AdminEvolution() {
           </CardContent>
         </Card>
 
-        <Card className="bg-slate-900/50 border-slate-800">
-          <CardHeader>
-            <CardTitle className="text-white">Current Prompt</CardTitle>
-            <CardDescription className="text-slate-400">
-              Active prompt version currently used by the expert pipeline.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Badge variant="secondary" className="bg-slate-800 text-slate-200">
-              Version: {promptData?.version || "N/A"}
-            </Badge>
-            <div className="rounded-md border border-slate-800 bg-slate-950/70 p-4 max-h-64 overflow-auto">
-              <p className="text-sm text-slate-300 whitespace-pre-wrap">
-                {promptData?.prompt || "Prompt not available"}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

@@ -56,6 +56,7 @@ export interface CombinedSourceRequest {
   inline_job_data?: JobData;
   target_role?: string;
   model_provider: 'gemini' | 'ollama' | 'ollama_generic';
+  ollama_model?: string | null;
 }
 
 // Role-Skill-API

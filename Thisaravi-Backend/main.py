@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict
 import google.genai as genai
-import thisaravi
+import ollama
 
 from neo4j import GraphDatabase
 
@@ -646,7 +646,7 @@ async def run_enriched_ollama(
 
     def _stream():
         try:
-            stream = thisaravi.chat(
+            stream = ollama.chat(
                 model=model_id,
                 messages=messages,
                 stream=True,
