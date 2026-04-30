@@ -4,8 +4,6 @@ import { CheckCircle2, Loader2, Circle, AlertTriangle } from "lucide-react";
 import { runAgentPipeline, runAgentPipelineFromPDF } from "@/services/agentService";
 import { analyzeJobGap } from "@/services/jobGapService";
 import { generateExplanation, buildExplainerPayload } from "@/services/explainerService";
-import { saveAnalysisToProfile, buildAnalysisData } from "@/services/profileService";
-import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 
 interface PipelineStage {
@@ -64,7 +62,6 @@ const pipelineStages: PipelineStage[] = [
 const Pipeline = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { checkAuth } = useAuth();
   const [currentStage, setCurrentStage] = useState(0);
   const [completedStages, setCompletedStages] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -117,7 +114,7 @@ const Pipeline = () => {
           setCurrentStage(5);
 
           // Stage 6: AI Explanation
-          console.log(`🤖 Generating AI explanation...`);
+           console.log(`🤖 Generating AI explanation...`);
           try {
             const explainerPayload = buildExplainerPayload(gapResults, 'role', roleKey, roleLabel);
             explanation = await generateExplanation(explainerPayload);
@@ -126,7 +123,7 @@ const Pipeline = () => {
           } catch (err) {
             console.warn("⚠️ Explanation generation failed:", err);
             gapResults.explanation = null;
-          }
+          } 
 
           setCompletedStages(prev => [...prev, pipelineStages[5].id]);
           setCurrentStage(6);
@@ -167,7 +164,8 @@ const Pipeline = () => {
             JSON.stringify(candidateData),
             jobFile,
             storeInGraph || false,
-            25
+            25,
+            'hybrid'
           );
           console.log("✅ Job gap analysis complete:", jobGapData);
           
@@ -188,7 +186,11 @@ const Pipeline = () => {
               skill_name: s.skill,
               deficit: s.deficit,
               importance: s.importance,
-              match_strength: s.match_strength
+              match_strength: s.match_strength,
+              P_gnn: s.P_gnn,
+              final_score: s.final_score,
+              reason: s.reason,
+              ranking_method: s.ranking_method || jobGapData.ranking_method || 'symbolic'
             })),
             // Include XAI data from backend if available
             xai: jobGapData.xai,
@@ -205,7 +207,7 @@ const Pipeline = () => {
           setCurrentStage(5);
 
           // Stage 6: AI Explanation
-          console.log(`🤖 Generating AI explanation...`);
+           console.log(`🤖 Generating AI explanation...`);
           try {
             const explainerPayload = buildExplainerPayload(
               gapResults, 
@@ -223,7 +225,7 @@ const Pipeline = () => {
               explanation: jobGapData.explanation_text,
               text: jobGapData.explanation_text
             } : null;
-          }
+          } 
 
           setCompletedStages(prev => [...prev, pipelineStages[5].id]);
           setCurrentStage(6);
@@ -234,20 +236,6 @@ const Pipeline = () => {
         }
 
         setResults(gapResults);
-
-        // Save analysis results to profile
-        try {
-          const analysisData = buildAnalysisData(gapResults, roleLabel ||gapResults.roleLabel);
-          await saveAnalysisToProfile(analysisData);
-          console.log("✅ Analysis saved to candidate profile");
-          
-          // Refresh user profile data to include the new analysis
-          await checkAuth();
-          console.log("✅ Profile data refreshed");
-        } catch (saveErr) {
-          console.warn("⚠️ Could not save analysis to profile:", saveErr);
-          // Continue even if save fails - analysis is still available
-        }
 
         // Navigate to results page after a short delay
         setTimeout(() => {

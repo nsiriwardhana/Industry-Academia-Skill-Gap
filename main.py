@@ -102,11 +102,11 @@ def start_backends():
     
     # Start Thisaravi Backend (port 8010)
     # DISABLED: Thisaravi has import issue, fix later
-    # print("Launching Thisaravi Backend - Skill Gap AI (port 8010)...")
-    # thisaravi_cmd = [sys.executable, "-m", "uvicorn", "main:app", "--reload", "--host", "0.0.0.0", "--port", "8010"]
-    # thisaravi_proc = subprocess.Popen(thisaravi_cmd, cwd=str(thisaravi_path), env={**os.environ, "PORT": "8010"})
-    # processes.append(thisaravi_proc)
-    # time.sleep(3)
+    print("Launching Thisaravi Backend - Skill Gap AI (port 8010)...")
+    thisaravi_cmd = [sys.executable, "-m", "uvicorn", "main:app", "--reload", "--host", "0.0.0.0", "--port", "8010"]
+    thisaravi_proc = subprocess.Popen(thisaravi_cmd, cwd=str(thisaravi_path), env={**os.environ, "PORT": "8010"})
+    processes.append(thisaravi_proc)
+    time.sleep(3)
     
     print("\n" + "="*80)
     print("OK - ALL 6 SERVICES RUNNING")

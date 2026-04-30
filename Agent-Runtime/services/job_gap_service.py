@@ -19,6 +19,7 @@ import logging
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 import requests
+from config import SKILL_GAP_RANKING_METHOD
 
 from .chandra_ocr_service import get_ocr_service
 from .skill_extract_service import get_skill_extract_service
@@ -90,7 +91,8 @@ class JobGapService:
         file_content: bytes,
         content_type: str,
         store_job: bool = True,
-        top_k: int = 25
+        top_k: int = 25,
+        ranking_method: str = SKILL_GAP_RANKING_METHOD
     ) -> Dict:
         """
         Run complete job gap analysis pipeline.
@@ -115,6 +117,7 @@ class JobGapService:
             "matched_skills": [],
             "missing_skills_ranked": [],
             "explanation_text": "",
+            "ranking_method": ranking_method,
             "pipeline_metadata": {}
         }
         
@@ -183,13 +186,15 @@ class JobGapService:
             gap_result = self._compute_gap_analysis(
                 candidate_id,
                 job_skills,
-                top_k
+                top_k,
+                ranking_method
             )
             
             result["readiness"] = gap_result["readiness"]
             result["skill_gap_index"] = gap_result["skill_gap_index"]
             result["matched_skills"] = gap_result["matched_skills"]
             result["missing_skills_ranked"] = gap_result["missing_skills"]
+            result["ranking_method"] = gap_result.get("ranking_method", ranking_method)
             
             # Step 7: Generate Explanation
             logger.info("Step 7: Generating Explanation")
@@ -343,7 +348,8 @@ class JobGapService:
         self,
         candidate_id: str,
         job_skills: List[Dict],
-        top_k: int
+        top_k: int,
+        ranking_method: str
     ) -> Dict:
         """
         Compute skill gap between candidate and job.
@@ -365,6 +371,17 @@ class JobGapService:
         """
         # Get candidate skill confidence
         candidate_skills = self._get_candidate_skills(candidate_id)
+        gnn_probs = {}
+
+        # Enable GNN-powered ranking for job-gap flow to match role-based behavior.
+        if ranking_method in ["hybrid", "additive_gnn"]:
+            gnn_probs = self._get_gnn_skill_probabilities(candidate_id)
+            logger.info(
+                f"Job-gap GNN probabilities loaded: {len(gnn_probs)} skills "
+                f"(method={ranking_method})"
+            )
+
+        gnn_probs_lower = {k.lower(): v for k, v in gnn_probs.items()} if gnn_probs else {}
         
         if not candidate_skills:
             logger.warning(f"No skills found for candidate: {candidate_id}")
@@ -387,12 +404,39 @@ class JobGapService:
             
             deficit = importance * (1 - match_strength)
             total_deficit += deficit
+
+            if gnn_probs:
+                p_gnn = gnn_probs.get(skill_name)
+                if p_gnn is None:
+                    p_gnn = gnn_probs_lower.get(skill_name.lower(), 0.5)
+            else:
+                p_gnn = None
+
+            if ranking_method == "hybrid" and p_gnn is not None:
+                # Same multiplicative idea as role-based hybrid:
+                # final_score = importance * gap * P_gnn
+                final_score = deficit * p_gnn
+            elif ranking_method == "additive_gnn" and p_gnn is not None:
+                gap = 1 - match_strength
+                final_score = (0.3 * gap) + (0.4 * importance) + (0.3 * p_gnn)
+            else:
+                # symbolic fallback
+                final_score = deficit
             
             skill_data = {
                 "skill": skill_name,
                 "importance": round(importance, 3),
                 "match_strength": round(match_strength, 3),
-                "deficit": round(deficit, 3)
+                "deficit": round(deficit, 3),
+                "P_gnn": round(p_gnn, 4) if p_gnn is not None else None,
+                "final_score": round(final_score, 4),
+                "ranking_method": ranking_method,
+                "reason": self._build_skill_reason(
+                    importance=importance,
+                    match_strength=match_strength,
+                    p_gnn=p_gnn,
+                    ranking_method=ranking_method
+                )
             }
             
             if match_strength >= 0.5:
@@ -404,16 +448,63 @@ class JobGapService:
         skill_gap_index = total_deficit / total_importance if total_importance > 0 else 1.0
         readiness = 1.0 - skill_gap_index
         
-        # Sort by deficit (highest first for missing)
-        missing_skills.sort(key=lambda x: x["deficit"], reverse=True)
+        # Sort by active ranking score for missing skills.
+        if ranking_method in ["hybrid", "additive_gnn"]:
+            missing_skills.sort(key=lambda x: x.get("final_score", 0.0), reverse=True)
+        else:
+            missing_skills.sort(key=lambda x: x["deficit"], reverse=True)
         matched_skills.sort(key=lambda x: x["match_strength"], reverse=True)
         
         return {
             "readiness": round(readiness, 3),
             "skill_gap_index": round(skill_gap_index, 3),
             "matched_skills": matched_skills[:top_k],
-            "missing_skills": missing_skills[:top_k]
+            "missing_skills": missing_skills[:top_k],
+            "ranking_method": ranking_method
         }
+
+    def _get_gnn_skill_probabilities(self, candidate_id: str) -> Dict[str, float]:
+        """
+        Fetch per-skill GNN learnability probabilities from Recommendation API.
+
+        Returns an empty dict on failure so job-gap flow gracefully falls back.
+        """
+        try:
+            url = f"{self.recommendation_api}/candidates/{candidate_id}/gnn-skill-probabilities"
+            response = requests.get(url, params={"include_all": "true"}, timeout=20)
+            if response.status_code == 200:
+                payload = response.json()
+                return payload.get("skill_probabilities", {}) or {}
+
+            logger.warning(
+                f"GNN probabilities request failed ({response.status_code}): {response.text[:200]}"
+            )
+            return {}
+        except Exception as e:
+            logger.warning(f"Failed to fetch GNN probabilities: {e}")
+            return {}
+
+    def _build_skill_reason(
+        self,
+        importance: float,
+        match_strength: float,
+        p_gnn: Optional[float],
+        ranking_method: str
+    ) -> str:
+        """Create human-readable reason text for ranked missing skills."""
+        gap = 1 - match_strength
+        if ranking_method == "hybrid" and p_gnn is not None:
+            learnability = "high" if p_gnn >= 0.7 else "medium" if p_gnn >= 0.4 else "low"
+            return (
+                f"gap={gap:.2f}, importance={importance:.2f}, "
+                f"learnability={p_gnn:.2f} ({learnability})"
+            )
+        if ranking_method == "additive_gnn" and p_gnn is not None:
+            return (
+                f"weighted score from gap={gap:.2f}, importance={importance:.2f}, "
+                f"learnability={p_gnn:.2f}"
+            )
+        return f"symbolic deficit from gap={gap:.2f} and importance={importance:.2f}"
     
     def _get_candidate_skills(self, candidate_id: str) -> Dict[str, float]:
         """
