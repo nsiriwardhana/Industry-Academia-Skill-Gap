@@ -324,7 +324,16 @@ class CandidateService:
         candidate = db.query(Candidate).filter(Candidate.user_id == user_id).first()
         
         if not candidate:
-            raise ValueError(f"No candidate profile found for user_id {user_id}")
+            # Auto-create a basic candidate record so analysis results can be stored
+            # even if the user never did the traditional CV-upload onboarding flow
+            candidate = Candidate(
+                user_id=user_id,
+                target_role=TargetRole.SOFTWARE_ENGINEER,  # default; updated later
+                status=ProcessingStatus.READY_FOR_RECOMMENDATIONS
+            )
+            db.add(candidate)
+            db.commit()
+            db.refresh(candidate)
 
         # Update analysis fields
         candidate.latest_analysis_date = datetime.utcnow()

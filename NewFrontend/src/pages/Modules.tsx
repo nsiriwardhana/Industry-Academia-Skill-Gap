@@ -45,7 +45,7 @@ const Modules = () => {
       gradient: "bg-gradient-accent"
     },
     {
-      title: "Skill Gap Analysis",
+      title: "Academic Based Skill Valuation",
       description: "Comprehensive assessment of your current skills versus industry demands with actionable improvement plans.",
       icon: TrendingUp,
       features: [

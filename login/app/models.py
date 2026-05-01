@@ -58,12 +58,14 @@ class User(Base):
 
 class TargetRole(str, enum.Enum):
     """Enum for target job roles"""
+    AI_ML_ENGINEER = "AI/ML Engineer"
     ML_ENGINEER = "ML Engineer"
     DATA_ANALYST = "Data Analyst"
     DATA_ENGINEER = "Data Engineer"
     DATA_SCIENTIST = "Data Scientist"
     SOFTWARE_ENGINEER = "Software Engineer"
     DEVOPS_ENGINEER = "DevOps Engineer"
+    WEB_DEVELOPER = "Web Developer"
 
 
 class ProcessingStatus(str, enum.Enum):
