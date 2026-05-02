@@ -3,7 +3,7 @@ import os
 import statistics
 from typing import List
 
-import thisaravi
+import ollama
 import google.genai as genai
 from dotenv import load_dotenv
 
@@ -169,7 +169,7 @@ def _call_ollama(prompt: str, model_name: str = None) -> str:
     if model_name is None:
         model_name = os.getenv("OLLAMA_MODEL_GENERIC", "gemma3:1b")
     try:
-        response = thisaravi.chat(
+        response = ollama.chat(
             model=model_name,
             messages=[{"role": "user", "content": prompt}],
             options={"num_ctx": 8192},

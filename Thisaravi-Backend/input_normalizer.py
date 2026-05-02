@@ -54,10 +54,10 @@ def normalize_demographics(current_role: str, major: Optional[str]) -> str:
 
     # Longer / complex role — use Ollama to condense
     try:
-        import thisaravi
+        import ollama
 
         raw = f"{role}, {mjr}" if mjr else role
-        resp = thisaravi.chat(
+        resp = ollama.chat(
             model=_NORMALIZER_MODEL,
             messages=[{
                 "role": "user",

@@ -60,11 +60,29 @@ def _load_jsonl(filepath: str) -> List[dict]:
     if not os.path.exists(filepath):
         return []
     entries = []
+    decoder = json.JSONDecoder()
     with open(filepath, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
-            if line:
-                entries.append(json.loads(line))
+            if not line:
+                continue
+
+            # Be tolerant of files that contain more than one JSON object on a line.
+            index = 0
+            while index < len(line):
+                while index < len(line) and line[index].isspace():
+                    index += 1
+                if index >= len(line):
+                    break
+
+                try:
+                    entry, next_index = decoder.raw_decode(line, index)
+                except json.JSONDecodeError:
+                    # Skip malformed trailing content instead of failing the whole load.
+                    break
+
+                entries.append(entry)
+                index = next_index
     return entries
 
 
