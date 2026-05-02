@@ -171,3 +171,5 @@ backend/output/
 
 # ===== Jupyter =====
 .ipynb_checkpoints/
+
+hf_cache/

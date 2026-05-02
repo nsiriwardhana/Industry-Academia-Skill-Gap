@@ -56,6 +56,25 @@ Keep it concise (2-3 sentences). Be professional and constructive.
 
 Provide your feedback:"""
 
+STRICT_FEEDBACK_PROMPT = """You are evaluating a candidate's answer to an interview question.
+
+Return ONLY valid JSON (no code fences, no extra text). Ensure the JSON is complete and properly closed.
+
+Required keys:
+- "score": integer 0-100
+- "feedback": short string (2-3 sentences)
+- "reasoning": one short sentence explaining the score
+
+Example response:
+{
+	"score": 85,
+	"feedback": "Good answer: you covered the main points concisely.",
+	"reasoning": "Relevant examples and correct terminology."
+}
+
+If you cannot produce the JSON, return an explicit JSON object with empty/default values. Do NOT include any commentary.
+"""
+
 
 QUIZ_PROMPT = """You are creating a technical quiz question based on the job description.
 

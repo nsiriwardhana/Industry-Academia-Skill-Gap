@@ -3,11 +3,13 @@ FastAPI server for AI-Powered Interview Training System
 Provides REST API endpoints for frontend integration
 """
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+import asyncio
+from collections import Counter
+
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 import fitz  # PyMuPDF
 import tempfile
 import os
@@ -18,6 +20,7 @@ from app.interview_gemini.rag.loader import chunk_text
 from app.interview_gemini.rag.vector_store import create_vector_store
 from app.interview_gemini.utils.session import create_session, get_session
 from app.interview_gemini.services.interview import generate_next_turn
+from app.services.emotion_service import predict_emotion
 from app.core.config import settings
 
 
@@ -75,6 +78,29 @@ class SessionStatus(BaseModel):
     is_active: bool
     question_count: int
     max_questions: int
+
+
+class EmotionAnalysisResponse(BaseModel):
+    session_id: str
+    emotion_label: str
+    emotion_confidence: float
+    scores: dict
+    sample_rate: int
+    duration_seconds: float
+
+
+class InterviewSummaryResponse(BaseModel):
+    session_id: str
+    total_answers: int
+    answer_correctness_score: float
+    emotion_analysis_score: float
+    dominant_emotion: Optional[str]
+    latest_emotion_label: Optional[str]
+    latest_emotion_confidence: float
+    latest_feedback: Optional[str]
+    latest_reasoning: Optional[str]
+    emotion_history: list
+    evaluation_history: list
 
 
 # API Endpoints
@@ -209,6 +235,109 @@ async def next_question(request: QuestionRequest):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating question: {str(e)}")
+
+
+@app.post("/api/analyze-emotion", response_model=EmotionAnalysisResponse)
+async def analyze_emotion(session_id: str = Form(...), file: UploadFile = File(...)):
+    """
+    Analyze a recorded voice answer using the trained SER model.
+    """
+    try:
+        session = get_session(session_id)
+
+        file_bytes = await file.read()
+        analysis = await asyncio.to_thread(predict_emotion, file_bytes)
+
+        emotion_result = {
+            "emotion_label": analysis["label"],
+            "emotion_confidence": analysis["confidence"],
+            "scores": analysis["scores"],
+            "sample_rate": analysis["sample_rate"],
+            "duration_seconds": analysis["duration_seconds"],
+            "filename": file.filename,
+        }
+
+        session.setdefault("emotion_results", []).append(emotion_result)
+
+        return EmotionAnalysisResponse(
+            session_id=session_id,
+            emotion_label=analysis["label"],
+            emotion_confidence=analysis["confidence"],
+            scores=analysis["scores"],
+            sample_rate=analysis["sample_rate"],
+            duration_seconds=analysis["duration_seconds"],
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Emotion analysis failed: {str(e)}")
+
+
+@app.get("/api/session/{session_id}/summary", response_model=InterviewSummaryResponse)
+async def get_session_summary(session_id: str):
+    """
+    Return aggregated answer correctness and emotion metrics for feedback.
+    """
+    try:
+        session = get_session(session_id)
+
+        evaluations = session.get("evaluations", [])
+        emotion_results = session.get("emotion_results", [])
+        answer_scores = session.get("answer_scores", [])
+
+        total_answers = max(len(evaluations), len(answer_scores), len(emotion_results))
+
+        answer_correctness_score = (
+            round(sum(answer_scores) / len(answer_scores), 2) if answer_scores else 0.0
+        )
+
+        emotion_analysis_score = (
+            round(
+                (sum(item.get("emotion_confidence", 0.0) for item in emotion_results) / len(emotion_results)) * 100,
+                2,
+            )
+            if emotion_results
+            else 0.0
+        )
+
+        dominant_emotion = None
+        latest_emotion_label = None
+        latest_emotion_confidence = 0.0
+
+        if emotion_results:
+            latest_emotion = emotion_results[-1]
+            latest_emotion_label = latest_emotion.get("emotion_label")
+            latest_emotion_confidence = round(float(latest_emotion.get("emotion_confidence", 0.0)) * 100, 2)
+
+            labels = [item.get("emotion_label", "") for item in emotion_results if item.get("emotion_label")]
+            if labels:
+                dominant_emotion = Counter(labels).most_common(1)[0][0]
+
+        latest_feedback = None
+        latest_reasoning = None
+        if evaluations:
+            latest_feedback = evaluations[-1].get("feedback")
+            latest_reasoning = evaluations[-1].get("reasoning")
+
+        return InterviewSummaryResponse(
+            session_id=session_id,
+            total_answers=total_answers,
+            answer_correctness_score=answer_correctness_score,
+            emotion_analysis_score=emotion_analysis_score,
+            dominant_emotion=dominant_emotion,
+            latest_emotion_label=latest_emotion_label,
+            latest_emotion_confidence=latest_emotion_confidence,
+            latest_feedback=latest_feedback,
+            latest_reasoning=latest_reasoning,
+            emotion_history=emotion_results,
+            evaluation_history=evaluations,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Summary not available: {str(e)}")
 
 
 @app.get("/api/session/{session_id}", response_model=SessionStatus)

@@ -64,11 +64,13 @@ ollama
 transformers
 peft
 accelerate
+json5
 
 # ============================================================================
 # Machine Learning & Data Science
 # ============================================================================
 torch
+soundfile
 torch-geometric
 numpy
 pandas

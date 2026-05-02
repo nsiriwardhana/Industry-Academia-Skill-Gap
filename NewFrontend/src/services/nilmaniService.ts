@@ -24,6 +24,29 @@ export interface NextQuestionResponse {
   is_complete: boolean;
 }
 
+export interface EmotionAnalysisResponse {
+  session_id: string;
+  emotion_label: string;
+  emotion_confidence: number;
+  scores: Record<string, number>;
+  sample_rate: number;
+  duration_seconds: number;
+}
+
+export interface InterviewSummaryResponse {
+  session_id: string;
+  total_answers: number;
+  answer_correctness_score: number;
+  emotion_analysis_score: number;
+  dominant_emotion?: string | null;
+  latest_emotion_label?: string | null;
+  latest_emotion_confidence: number;
+  latest_feedback?: string | null;
+  latest_reasoning?: string | null;
+  emotion_history: Array<Record<string, unknown>>;
+  evaluation_history: Array<Record<string, unknown>>;
+}
+
 export interface SessionStatus {
   session_id: string;
   status: string;
@@ -98,6 +121,46 @@ export const submitAnswer = async (
   
   return response.json();
 };
+
+  /**
+   * Analyze the user's voice answer with the SER backend.
+   */
+  export const analyzeEmotion = async (
+    sessionId: string,
+    audioBlob: Blob
+  ): Promise<EmotionAnalysisResponse> => {
+    const formData = new FormData();
+    formData.append('session_id', sessionId);
+    formData.append('file', audioBlob, 'answer.wav');
+
+    const response = await fetch(`${NILMANI_API_BASE}/api/analyze-emotion`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Emotion analysis failed' }));
+      throw new Error(error.detail || 'Emotion analysis failed');
+    }
+
+    return response.json();
+  };
+
+  /**
+   * Fetch the final feedback summary for the session.
+   */
+  export const getInterviewSummary = async (
+    sessionId: string
+  ): Promise<InterviewSummaryResponse> => {
+    const response = await fetch(`${NILMANI_API_BASE}/api/session/${sessionId}/summary`);
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to get interview summary' }));
+      throw new Error(error.detail || 'Failed to get interview summary');
+    }
+
+    return response.json();
+  };
 
 /**
  * Get session status

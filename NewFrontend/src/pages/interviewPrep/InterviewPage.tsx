@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { startInterview, submitAnswer } from "@/services/nilmaniService";
+import { analyzeEmotion, startInterview, submitAnswer } from "@/services/nilmaniService";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Mic, MicOff, Send, CheckCircle, Loader2, Bot, User } from "lucide-react";
@@ -17,6 +17,8 @@ declare global {
   interface Window {
     SpeechRecognition: any;
     webkitSpeechRecognition: any;
+    AudioContext: typeof AudioContext;
+    webkitAudioContext: typeof AudioContext;
   }
 }
 
@@ -42,6 +44,57 @@ interface SpeechRecognitionAlternative {
   confidence: number;
 }
 
+const mergeFloat32Arrays = (chunks: Float32Array[]) => {
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const merged = new Float32Array(totalLength);
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return merged;
+};
+
+const encodeWav = (samples: Float32Array, sampleRate: number) => {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+
+  const writeString = (offset: number, text: string) => {
+    for (let index = 0; index < text.length; index += 1) {
+      view.setUint8(offset + index, text.charCodeAt(index));
+    }
+  };
+
+  const floatTo16Bit = (input: number) => {
+    const clamped = Math.max(-1, Math.min(1, input));
+    return clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
+  };
+
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, "data");
+  view.setUint32(40, samples.length * 2, true);
+
+  let offset = 44;
+  for (let index = 0; index < samples.length; index += 1) {
+    view.setInt16(offset, floatTo16Bit(samples[index]), true);
+    offset += 2;
+  }
+
+  return new Blob([buffer], { type: "audio/wav" });
+};
+
 const InterviewPage = () => {
   const navigate = useNavigate();
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -56,9 +109,17 @@ const InterviewPage = () => {
   // Speech recognition
   const [listening, setListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(true);
+  const [audioSupported, setAudioSupported] = useState(true);
   const recognitionRef = useRef<any>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const conversationEndRef = useRef<HTMLDivElement>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const audioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const audioProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const audioChunksRef = useRef<Float32Array[]>([]);
+  const audioSampleRateRef = useRef<number>(16000);
+  const lastAudioBlobRef = useRef<Blob | null>(null);
 
   useEffect(() => {
     const storedSessionId = localStorage.getItem("nilmani_sessionId");
@@ -79,6 +140,8 @@ const InterviewPage = () => {
           // Ignore errors on cleanup
         }
       }
+
+      cleanupAudioCapture();
     };
   }, [navigate]);
 
@@ -86,6 +149,96 @@ const InterviewPage = () => {
     // Scroll to bottom when conversation updates
     conversationEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [conversationHistory]);
+
+  const cleanupAudioCapture = () => {
+    try {
+      audioProcessorRef.current?.disconnect();
+    } catch (error) {
+      // Ignore disconnect errors
+    }
+
+    try {
+      audioSourceRef.current?.disconnect();
+    } catch (error) {
+      // Ignore disconnect errors
+    }
+
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((track) => track.stop());
+    }
+
+    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+      void audioContextRef.current.close();
+    }
+
+    audioProcessorRef.current = null;
+    audioSourceRef.current = null;
+    audioStreamRef.current = null;
+    audioContextRef.current = null;
+  };
+
+  const startAudioCapture = async () => {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+
+    if (!AudioContextClass || !navigator.mediaDevices?.getUserMedia) {
+      setAudioSupported(false);
+      return false;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const audioContext = new AudioContextClass();
+      const source = audioContext.createMediaStreamSource(stream);
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      const silence = audioContext.createGain();
+
+      audioChunksRef.current = [];
+      audioSampleRateRef.current = audioContext.sampleRate;
+
+      processor.onaudioprocess = (event) => {
+        const inputBuffer = event.inputBuffer.getChannelData(0);
+        audioChunksRef.current.push(new Float32Array(inputBuffer));
+      };
+
+      source.connect(processor);
+      processor.connect(silence);
+      silence.connect(audioContext.destination);
+
+      audioContextRef.current = audioContext;
+      audioStreamRef.current = stream;
+      audioSourceRef.current = source;
+      audioProcessorRef.current = processor;
+      lastAudioBlobRef.current = null;
+
+      return true;
+    } catch (captureError) {
+      console.error("Audio capture error:", captureError);
+      setAudioSupported(false);
+      cleanupAudioCapture();
+      return false;
+    }
+  };
+
+  const stopAudioCapture = async (): Promise<Blob | null> => {
+    if (!audioContextRef.current) {
+      return lastAudioBlobRef.current;
+    }
+
+    try {
+      cleanupAudioCapture();
+
+      const mergedSamples = mergeFloat32Arrays(audioChunksRef.current);
+      if (!mergedSamples.length) {
+        return null;
+      }
+
+      const wavBlob = encodeWav(mergedSamples, audioSampleRateRef.current || 16000);
+      lastAudioBlobRef.current = wavBlob;
+      return wavBlob;
+    } finally {
+      audioContextRef.current = null;
+    }
+  };
 
   const initializeSpeechRecognition = () => {
     const SpeechRecognition =
@@ -108,22 +261,33 @@ const InterviewPage = () => {
     };
 
     recognition.onstart = () => setListening(true);
-    recognition.onend = () => setListening(false);
+    recognition.onend = () => {
+      setListening(false);
+      void stopAudioCapture();
+    };
     recognition.onerror = (event: any) => {
       console.error("Speech recognition error:", event.error);
       setListening(false);
+      void stopAudioCapture();
     };
 
     recognitionRef.current = recognition;
   };
 
-  const toggleListening = () => {
+  const toggleListening = async () => {
     if (!recognitionRef.current) return;
 
     if (listening) {
       recognitionRef.current.stop();
+      await stopAudioCapture();
     } else {
       setUserAnswer("");
+
+      const audioReady = await startAudioCapture();
+      if (!audioReady) {
+        console.warn("Emotion recording is unavailable. Voice transcription will still work.");
+      }
+
       recognitionRef.current.start();
     }
   };
@@ -177,6 +341,8 @@ const InterviewPage = () => {
       recognitionRef.current.stop();
     }
 
+    const capturedAudio = listening ? await stopAudioCapture() : lastAudioBlobRef.current;
+
     setLoading(true);
     setError(null);
 
@@ -187,7 +353,14 @@ const InterviewPage = () => {
     ]);
 
     try {
-      const response = await submitAnswer(sessionId!, userAnswer);
+      const [response, emotionResponse] = await Promise.all([
+        submitAnswer(sessionId!, userAnswer),
+        capturedAudio ? analyzeEmotion(sessionId!, capturedAudio) : Promise.resolve(null),
+      ]);
+
+      if (emotionResponse) {
+        console.debug("Emotion analysis result:", emotionResponse);
+      }
 
       if (response.is_complete) {
         setIsComplete(true);
@@ -222,7 +395,15 @@ const InterviewPage = () => {
 
   const handleEndInterview = () => {
     if (window.confirm("Are you sure you want to end the interview?")) {
-      localStorage.removeItem("nilmani_sessionId");
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (error) {
+          // Ignore stop errors
+        }
+      }
+
+      void stopAudioCapture();
       navigate("/interview-prep/feedback");
     }
   };
@@ -400,6 +581,12 @@ const InterviewPage = () => {
             <div className="interview-error-message">
               {error}
             </div>
+          )}
+
+          {!audioSupported && (
+            <p className="interview-input-hint text-warning">
+              Voice recording is unavailable in this browser, so emotion analysis will be skipped.
+            </p>
           )}
 
           <p className="interview-input-hint">

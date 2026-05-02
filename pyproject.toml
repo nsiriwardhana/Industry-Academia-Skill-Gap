@@ -56,6 +56,7 @@ dependencies = [
     "sqlalchemy",
     "streamlit",
     "torch",
+    "soundfile",
     "torch-geometric",
     "tqdm",
     "transformers",
