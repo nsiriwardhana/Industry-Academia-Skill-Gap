@@ -4,10 +4,8 @@ import { CheckCircle2, Loader2, Circle, AlertTriangle } from "lucide-react";
 import { runAgentPipeline, runAgentPipelineFromPDF } from "@/services/agentService";
 import { analyzeJobGap } from "@/services/jobGapService";
 import { generateExplanation, buildExplainerPayload } from "@/services/explainerService";
+import { saveAnalysisToProfile, buildAnalysisData } from "@/services/profileService";
 import { toast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
-
-const AUTH_API = import.meta.env.VITE_AUTH_API || 'http://localhost:8182';
 
 interface PipelineStage {
   id: string;
@@ -65,102 +63,10 @@ const pipelineStages: PipelineStage[] = [
 const Pipeline = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { checkAuth } = useAuth();
   const [currentStage, setCurrentStage] = useState(0);
   const [completedStages, setCompletedStages] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<any>(null);
-
-  // Helper: save analysis results to the Auth backend so Profile page can display them
-  const saveAnalysisToProfile = async (gapResults: any, roleLabel?: string) => {
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      console.warn('⚠️ No auth token found, cannot save analysis results.');
-      return;
-    }
-
-    try {
-      // Normalize matched skills: Agent Runtime returns { skill_name, confidence, evidence_count }
-      const matchedSkills = (gapResults.skill_confidence_top || []).map((s: any) => ({
-        skill: s.skill_name || s.skill,
-        confidence: s.confidence || 0,
-        evidence_count: s.evidence_count || 1,
-      }));
-
-      // Normalize missing skills: Agent Runtime returns { skill_name, deficit, P_gnn, ... }
-      const missingSkills = (gapResults.skill_gap_top || []).map((s: any) => ({
-        skill: s.skill_name || s.skill,
-        deficit: s.deficit || 0,
-        importance: s.importance || 0,
-        P_gnn: s.P_gnn,
-        final_score: s.final_score || 0,
-        reason: s.reason || '',
-      }));
-
-      // Normalize extracted skills (just a flat list of names)
-      const extractedSkills = matchedSkills.map((s: any) => s.skill).filter(Boolean);
-
-      // Compute readiness score: agent returns 0-1 float, profile expects 0-100 int
-      let readinessScore: number | null = null;
-      if (gapResults.readiness_score !== undefined && gapResults.readiness_score !== null) {
-        const raw = Number(gapResults.readiness_score);
-        // If it's already 0-100 leave it, otherwise multiply by 100
-        readinessScore = Math.round(raw > 1 ? raw : raw * 100);
-      }
-
-      // Extract plain text explanation
-      const aiExplanation =
-        (typeof gapResults.explanation === 'string'
-          ? gapResults.explanation
-          : gapResults.explanation?.explanation ||
-            gapResults.explanation?.text ||
-            gapResults.explanation?.summary ||
-            null) || null;
-
-      const analysisSummary = roleLabel
-        ? `Analysis for ${roleLabel} — Readiness: ${readinessScore ?? 'N/A'}%`
-        : null;
-
-      const payload = {
-        readiness_score: readinessScore,
-        skill_gap_index: gapResults.skill_gap_index || null,
-        ai_explanation: aiExplanation,
-        matched_skills: matchedSkills,
-        missing_skills: missingSkills,
-        analysis_summary: analysisSummary,
-        extracted_skills: extractedSkills,
-        target_role: gapResults.roleLabel || roleLabel || null,
-      };
-
-      console.log('💾 Saving analysis to profile API...', payload);
-
-      const saveResponse = await fetch(`${AUTH_API}/candidate/me/analysis`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (saveResponse.ok) {
-        const saved = await saveResponse.json();
-        console.log('✅ Analysis saved to profile:', saved);
-        toast({ title: 'Results Saved', description: 'Your analysis has been saved to your profile.' });
-        // Refresh the auth context so Profile page loads fresh data
-        await checkAuth();
-      } else {
-        const errText = await saveResponse.text();
-        console.error('❌ Failed to save analysis to profile:', saveResponse.status, errText);
-        // If 404 (no candidate record), try creating one first
-        if (saveResponse.status === 404) {
-          console.warn('⚠️ No candidate profile found. Analysis will only be visible this session.');
-        }
-      }
-    } catch (err) {
-      console.error('❌ Error saving analysis to profile:', err);
-    }
-  };
 
   // Execute the actual API pipeline
   useEffect(() => {
@@ -209,7 +115,7 @@ const Pipeline = () => {
           setCurrentStage(5);
 
           // Stage 6: AI Explanation
-           console.log(`🤖 Generating AI explanation...`);
+          console.log(`🤖 Generating AI explanation...`);
           try {
             const explainerPayload = buildExplainerPayload(gapResults, 'role', roleKey, roleLabel);
             explanation = await generateExplanation(explainerPayload);
@@ -218,7 +124,7 @@ const Pipeline = () => {
           } catch (err) {
             console.warn("⚠️ Explanation generation failed:", err);
             gapResults.explanation = null;
-          } 
+          }
 
           setCompletedStages(prev => [...prev, pipelineStages[5].id]);
           setCurrentStage(6);
@@ -234,7 +140,8 @@ const Pipeline = () => {
           // Stage 1-3: Parse CV first using Agent Runtime
           console.log(`🚀 Step 1: Parsing CV from PDF: ${cvFile.name}`);
           // Use a temporary role just to parse the CV and get candidate data
-          const tempResults = await runAgentPipelineFromPDF(cvFile, 'ai_ml_engineer', 10, false);
+          const tempRoleKey = 'ai_ml_engineer';
+          const tempResults = await runAgentPipelineFromPDF(cvFile, tempRoleKey, 10, false);
           console.log("✅ CV parsed, candidate_id:", tempResults.candidate_id);
           
           // Extract candidate data we need for job gap analysis
@@ -266,10 +173,12 @@ const Pipeline = () => {
           
           // Normalize job-based response to match role-based format
           gapResults = {
-            candidate_id: jobGapData.candidate_id,
+            candidate_id: jobGapData.candidate_id || tempResults.candidate_id,
             job_id: jobGapData.job_id,
             readiness_score: jobGapData.readiness,
             skill_gap_index: jobGapData.skill_gap_index,
+            // Use the temp role key for course recommendations (the one stored in Neo4j)
+            role_key: tempRoleKey,
             // Convert matched_skills to skill_confidence_top format
             skill_confidence_top: (jobGapData.matched_skills || []).map((s: any) => ({
               skill_name: s.skill,
@@ -302,7 +211,7 @@ const Pipeline = () => {
           setCurrentStage(5);
 
           // Stage 6: AI Explanation
-           console.log(`🤖 Generating AI explanation...`);
+          console.log(`🤖 Generating AI explanation...`);
           try {
             const explainerPayload = buildExplainerPayload(
               gapResults, 
@@ -320,7 +229,7 @@ const Pipeline = () => {
               explanation: jobGapData.explanation_text,
               text: jobGapData.explanation_text
             } : null;
-          } 
+          }
 
           setCompletedStages(prev => [...prev, pipelineStages[5].id]);
           setCurrentStage(6);
@@ -332,8 +241,14 @@ const Pipeline = () => {
 
         setResults(gapResults);
 
-        // Save results to backend profile so they appear on the Profile page
-        await saveAnalysisToProfile(gapResults, gapResults.roleLabel);
+        // Store results in the profile backend
+        console.log("💾 Saving analysis results to profile...");
+        try {
+          const analysisData = buildAnalysisData(gapResults, gapResults.roleLabel);
+          await saveAnalysisToProfile(analysisData);
+        } catch (err) {
+          console.error("⚠️ Failed to save analysis to profile:", err);
+        }
 
         // Navigate to results page after a short delay
         setTimeout(() => {

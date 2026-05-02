@@ -30,7 +30,7 @@ import {
 import { useState, useEffect } from "react";
 
 const Profile = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, checkAuth } = useAuth();
   const navigate = useNavigate();
   const [skills, setSkills] = useState<string[]>([]);
   const [interests, setInterests] = useState<string[]>([]);
@@ -51,6 +51,11 @@ const Profile = () => {
     setSkills(normalizeList(user?.skills));
     setInterests(normalizeList(user?.interests));
   }, [user]);
+
+  // Refresh user data when profile page mounts to ensure latest analysis is shown
+  useEffect(() => {
+    checkAuth();
+  }, []);
 
   if (!user) {
     return (
