@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Mic, MicOff, Send, CheckCircle, Loader2, Bot, User } from "lucide-react";
 import "../styles/interview.css";
+import QuestionRater from "@/components/validation/QuestionRater";
+import ExportValidation from "@/components/validation/ExportValidation";
 
 interface ConversationItem {
   type: 'question' | 'answer' | 'complete';
@@ -464,9 +466,12 @@ const InterviewPage = () => {
             Question {questionNumber} of {totalQuestions}
           </div>
         </div>
-        <Button variant="outline" onClick={handleEndInterview}>
-          End Interview
-        </Button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <ExportValidation />
+          <Button variant="outline" onClick={handleEndInterview}>
+            End Interview
+          </Button>
+        </div>
       </div>
 
       <div className="interview-container">
@@ -502,6 +507,15 @@ const InterviewPage = () => {
                 </div>
               )}
               <div className="interview-message-content">{item.content}</div>
+              {item.type === "question" && (
+                <div className="mt-2">
+                  <QuestionRater
+                    jobId={sessionId}
+                    questionId={String(item.number ?? index)}
+                    questionText={item.content}
+                  />
+                </div>
+              )}
             </div>
           ))}
 

@@ -46,6 +46,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Optional validation endpoints (separate module, disabled by default)
+try:
+    from app.validation.api import router as validation_router
+
+    app.include_router(validation_router)
+except Exception:
+    # If validation package isn't present or fails, proceed without it
+    pass
+
 # Initialize embeddings
 embeddings = get_local_embeddings()
 

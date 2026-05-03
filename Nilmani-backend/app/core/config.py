@@ -49,7 +49,14 @@ class Settings(BaseSettings):
     )
     SER_SAMPLE_RATE: int = int(os.getenv("SER_SAMPLE_RATE", 16000))
     SER_MAX_SECONDS: int = int(os.getenv("SER_MAX_SECONDS", 4))
-    
+    # ========= Validation settings =========
+    # Toggle validation API (default: disabled)
+    VALIDATION_ENABLED: bool = os.getenv("VALIDATION_ENABLED", "false").lower() == "true"
+    # Directory where CSVs and artifacts will be stored (default: app/validation)
+    VALIDATION_DIR: str = os.getenv(
+        "VALIDATION_DIR",
+        str(Path(__file__).resolve().parent.parent / "validation"),
+    )
     
 
 
