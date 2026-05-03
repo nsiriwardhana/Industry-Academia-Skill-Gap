@@ -31,7 +31,12 @@ def create_session(vector_store) -> str:
         "questions_asked": 0,
         "question_count": 0,  # For API compatibility
         "ended": False,
-        "created_at": None  # Can add timestamp if needed
+        "created_at": None,  # Can add timestamp if needed
+        "last_question": None,
+        "last_evaluation": None,
+        "evaluations": [],
+        "answer_scores": [],
+        "emotion_results": [],
     }
     
     logger.info(f"Created session: {session_id}")

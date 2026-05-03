@@ -37,7 +37,26 @@ class Settings(BaseSettings):
     CHAT_MODEL: str = os.getenv("CHAT_MODEL", "gemini-1.5-flash")
     # EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "gemini-embed-001")
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "models/embedding-001")
-    
+
+    # ========= Speech Emotion Recognition =========
+    SER_MODEL_PATH: str = os.getenv(
+        "SER_MODEL_PATH",
+        str(Path(__file__).resolve().parent.parent / "models" / "ser_wav2vec2_bilstm_attention.pth"),
+    )
+    SER_METADATA_PATH: str = os.getenv(
+        "SER_METADATA_PATH",
+        str(Path(__file__).resolve().parent.parent / "models" / "ser_metadata.json"),
+    )
+    SER_SAMPLE_RATE: int = int(os.getenv("SER_SAMPLE_RATE", 16000))
+    SER_MAX_SECONDS: int = int(os.getenv("SER_MAX_SECONDS", 4))
+    # ========= Validation settings =========
+    # Toggle validation API (default: disabled)
+    VALIDATION_ENABLED: bool = os.getenv("VALIDATION_ENABLED", "false").lower() == "true"
+    # Directory where CSVs and artifacts will be stored (default: app/validation)
+    VALIDATION_DIR: str = os.getenv(
+        "VALIDATION_DIR",
+        str(Path(__file__).resolve().parent.parent / "validation"),
+    )
     
 
 

@@ -25,9 +25,42 @@ thisaravi_path = project_root / "Thisaravi-Backend"
 
 processes = []
 
+
+def start_uvicorn_service(
+    name,
+    module,
+    cwd,
+    port,
+    extra_args=None,
+    env=None,
+    reload=True,
+    reload_excludes=None,
+):
+    print(f"Launching {name} (port {port})...")
+    cmd = [
+        sys.executable,
+        "-m",
+        "uvicorn",
+        module,
+        "--host",
+        "0.0.0.0",
+        "--port",
+        str(port),
+    ]
+    if reload:
+        cmd.append("--reload")
+        for pattern in reload_excludes or []:
+            cmd.extend(["--reload-exclude", pattern])
+    if extra_args:
+        cmd.extend(extra_args)
+    proc = subprocess.Popen(cmd, cwd=str(cwd), env=env)
+    processes.append((name, proc))
+    time.sleep(3)
+    return proc
+
 def signal_handler(sig, frame):
     print("\n\nShutting down backends...")
-    for proc in processes:
+    for _, proc in processes:
         if proc and proc.poll() is None:
             proc.terminate()
             try:
@@ -58,55 +91,66 @@ def start_backends():
     
     print("\nStarting services...\n")
     
-    # Start Config Server (port 8099) - FIRST, before other services
-    print("Launching Config Server (port 8099)...")
-    config_cmd = [sys.executable, "-m", "uvicorn", "config_server:app", "--reload", "--host", "0.0.0.0", "--port", "8099"]
-    config_proc = subprocess.Popen(config_cmd, cwd=str(project_root))
-    processes.append(config_proc)
-    time.sleep(2)
+    # Start Config Server without reload so OneDrive / .venv events do not
+    # tear down the whole launcher.
+    start_uvicorn_service("Config Server", "config_server:app", project_root, 8099, reload=False)
     
     # Start Login Backend (port 8182)
-    print("Launching Login Backend (port 8182)...")
-    login_cmd = [sys.executable, "-m", "uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8182"]
-    login_proc = subprocess.Popen(login_cmd, cwd=str(login_path))
-    processes.append(login_proc)
-    time.sleep(3)
+    start_uvicorn_service(
+        "Login Backend",
+        "app.main:app",
+        login_path,
+        8182,
+        reload_excludes=[".venv", ".venv/**", "**/.venv/**"],
+    )
     
     # Start Agent Runtime (port 8003)
-    print("Launching Agent Runtime (port 8003)...")
-    agent_cmd = [sys.executable, "-m", "uvicorn", "main:app", "--reload", "--host", "0.0.0.0", "--port", "8003"]
-    agent_proc = subprocess.Popen(agent_cmd, cwd=str(agent_path))
-    processes.append(agent_proc)
-    time.sleep(3)
+    start_uvicorn_service(
+        "Agent Runtime",
+        "main:app",
+        agent_path,
+        8003,
+        reload_excludes=[".venv", ".venv/**", "**/.venv/**"],
+    )
     
     # Start Nipuni Backend (port 8000)
-    print("Launching Skill Backend (port 8000)...")
-    nipuni_cmd = [sys.executable, "-m", "uvicorn", "src.app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
-    nipuni_proc = subprocess.Popen(nipuni_cmd, cwd=str(nipuni_path))
-    processes.append(nipuni_proc)
-    time.sleep(3)
+    start_uvicorn_service(
+        "Skill Backend",
+        "src.app.main:app",
+        nipuni_path,
+        8000,
+        reload_excludes=[".venv", ".venv/**", "**/.venv/**"],
+    )
     
     # Start Nilmani Backend (port 8188)
-    print("Launching Interview Backend - Nilmani (port 8188)...")
-    nilmani_cmd = [sys.executable, "-m", "uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8188"]
-    nilmani_proc = subprocess.Popen(nilmani_cmd, cwd=str(nilmani_path))
-    processes.append(nilmani_proc)
-    time.sleep(3)
+    start_uvicorn_service(
+        "Interview Backend - Nilmani",
+        "app.main:app",
+        nilmani_path,
+        8188,
+        reload_excludes=[".venv", ".venv/**", "**/.venv/**"],
+    )
     
     # Start Recommendation Engine (port 8001)
-    print("Launching Recommendation Engine (port 8001)...")
-    recommendation_cmd = [sys.executable, "-m", "uvicorn", "main:app", "--reload", "--host", "0.0.0.0", "--port", "8001"]
-    recommendation_proc = subprocess.Popen(recommendation_cmd, cwd=str(recommendation_path))
-    processes.append(recommendation_proc)
-    time.sleep(3)
+    start_uvicorn_service(
+        "Recommendation Engine",
+        "main:app",
+        recommendation_path,
+        8001,
+        reload_excludes=[".venv", ".venv/**", "**/.venv/**"],
+    )
     
-    # Start Thisaravi Backend (port 8010)
-    # DISABLED: Thisaravi has import issue, fix later
-    print("Launching Thisaravi Backend - Skill Gap AI (port 8010)...")
-    thisaravi_cmd = [sys.executable, "-m", "uvicorn", "main:app", "--reload", "--host", "0.0.0.0", "--port", "8010"]
-    thisaravi_proc = subprocess.Popen(thisaravi_cmd, cwd=str(thisaravi_path), env={**os.environ, "PORT": "8010"})
-    processes.append(thisaravi_proc)
-    time.sleep(3)
+    # Thisaravi is intentionally disabled until its import issue is fixed.
+    # Set ENABLE_THISARAVI=1 to opt in when the backend is ready.
+    if os.getenv("ENABLE_THISARAVI") == "1":
+        start_uvicorn_service(
+            "Thisaravi Backend - Skill Gap AI",
+            "main:app",
+            thisaravi_path,
+            8010,
+            env={**os.environ, "PORT": "8010"},
+            reload_excludes=[".venv", ".venv/**", "**/.venv/**"],
+        )
     
     print("\n" + "="*80)
     print("OK - ALL 6 SERVICES RUNNING")
@@ -146,9 +190,9 @@ Stop: Ctrl+C
     
     try:
         while True:
-            for proc in processes:
+            for name, proc in processes:
                 if proc and proc.poll() is not None:
-                    print(f"⚠️ Service exited")
+                    print(f"⚠️ Service exited: {name}")
                     signal_handler(None, None)
             time.sleep(1)
     except KeyboardInterrupt:

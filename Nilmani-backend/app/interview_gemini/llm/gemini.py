@@ -125,10 +125,10 @@ def get_llm():
     
     return ChatGoogleGenerativeAI(
         model=CHAT_MODEL,
-        temperature=0.7,
+        temperature=0.2,
         google_api_key=GEMINI_API_KEY,
-        max_output_tokens=512,
-        timeout=30
+        max_output_tokens=1024,
+        timeout=60
     )
 
 
