@@ -7,10 +7,10 @@ Agentic orchestration for CV processing and skill gap analysis:
 NEW: Job Description image/PDF → Gap Analysis pipeline
 
 Run with:
-    uvicorn main:app --reload --port 8002
+    uvicorn main:app --reload --port 8003
     
 Swagger docs:
-    http://localhost:8002/docs
+    http://localhost:8003/docs
 """
 import logging
 from contextlib import asynccontextmanager
@@ -81,20 +81,20 @@ async def lifespan(app: FastAPI):
     Lifespan context manager for startup/shutdown events.
     """
     # Startup
-    logger.info("🚀 Starting Agent Runtime Backend...")
+    logger.info("[START] Starting Agent Runtime Backend...")
     try:
         Neo4jConnection.get_driver()
-        logger.info("✓ Application startup complete")
+        logger.info("[OK] Application startup complete")
     except Exception as e:
-        logger.error(f"✗ Startup failed: {e}")
+        logger.error(f"[ERROR] Startup failed: {e}")
         raise
     
     yield
     
     # Shutdown
-    logger.info("🛑 Shutting down...")
+    logger.info("[STOP] Shutting down...")
     Neo4jConnection.close()
-    logger.info("✓ Shutdown complete")
+    logger.info("[OK] Shutdown complete")
 
 
 # Create FastAPI application
@@ -959,6 +959,6 @@ if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8002,
+        port=8003,
         reload=True
     )

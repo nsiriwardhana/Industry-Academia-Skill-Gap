@@ -4,6 +4,8 @@ import { CheckCircle2, Loader2, Circle, AlertTriangle } from "lucide-react";
 import { runAgentPipeline, runAgentPipelineFromPDF } from "@/services/agentService";
 import { analyzeJobGap } from "@/services/jobGapService";
 import { generateExplanation, buildExplainerPayload } from "@/services/explainerService";
+import { saveAnalysisToProfile, buildAnalysisData } from "@/services/profileService";
+import { getCourseRecommendations } from "@/services/courseService";
 import { toast } from "@/hooks/use-toast";
 
 interface PipelineStage {
@@ -134,8 +136,25 @@ const Pipeline = () => {
           
         } else if (type === 'job-based') {
           if (!jobFile) throw new Error("No job description file provided");
+          if (!cvFile) throw new Error("No CV file provided for job-based analysis");
           
-          // Simulate progress through first 3 stages
+          // Stage 1-3: Parse CV first using Agent Runtime
+          console.log(`🚀 Step 1: Parsing CV from PDF: ${cvFile.name}`);
+          // Use a temporary role just to parse the CV and get candidate data
+          const tempRoleKey = 'ai_ml_engineer';
+          const tempResults = await runAgentPipelineFromPDF(cvFile, tempRoleKey, 10, false);
+          console.log("✅ CV parsed, candidate_id:", tempResults.candidate_id);
+          
+          // Extract candidate data we need for job gap analysis
+          const candidateData = {
+            candidate_id: tempResults.candidate_id,
+            candidate_name: tempResults.candidate_name || "Unknown",
+            skills: tempResults.skill_confidence_top?.map((s: any) => ({
+              name: s.skill_name,
+              proficiency: s.confidence > 0.8 ? "advanced" : s.confidence > 0.6 ? "intermediate" : "beginner"
+            })) || []
+          };
+          
           for (let i = 0; i < 3; i++) {
             await new Promise(resolve => setTimeout(resolve, 300));
             setCompletedStages(prev => [...prev, pipelineStages[i].id]);
@@ -143,21 +162,24 @@ const Pipeline = () => {
           }
 
           // Stage 4: Job Gap Analysis
-          console.log(`🚀 Running job-gap analysis...`);
+          console.log(`🚀 Step 2: Running job-gap analysis with parsed candidate data...`);
           const jobGapData = await analyzeJobGap(
-            JSON.stringify(profile),
+            JSON.stringify(candidateData),
             jobFile,
             storeInGraph || false,
-            25
+            25,
+            'hybrid'
           );
           console.log("✅ Job gap analysis complete:", jobGapData);
           
           // Normalize job-based response to match role-based format
           gapResults = {
-            candidate_id: jobGapData.candidate_id,
+            candidate_id: jobGapData.candidate_id || tempResults.candidate_id,
             job_id: jobGapData.job_id,
             readiness_score: jobGapData.readiness,
             skill_gap_index: jobGapData.skill_gap_index,
+            // Use the temp role key for course recommendations (the one stored in Neo4j)
+            role_key: tempRoleKey,
             // Convert matched_skills to skill_confidence_top format
             skill_confidence_top: (jobGapData.matched_skills || []).map((s: any) => ({
               skill_name: s.skill,
@@ -169,8 +191,14 @@ const Pipeline = () => {
               skill_name: s.skill,
               deficit: s.deficit,
               importance: s.importance,
-              match_strength: s.match_strength
+              match_strength: s.match_strength,
+              P_gnn: s.P_gnn,
+              final_score: s.final_score,
+              reason: s.reason,
+              ranking_method: s.ranking_method || jobGapData.ranking_method || 'symbolic'
             })),
+            // Include XAI data from backend if available
+            xai: jobGapData.xai,
             // Store explanation text if available
             explanation_text: jobGapData.explanation_text,
             candidate_upsert: jobGapData.candidate_upsert
@@ -213,6 +241,32 @@ const Pipeline = () => {
         }
 
         setResults(gapResults);
+
+        // Fetch course recommendations to save in profile
+        let recommendedCourses: any[] = [];
+        try {
+          console.log("📚 Fetching course recommendations to save...");
+          // We need candidate_id and roleKey
+          const candidateId = gapResults.candidate_id;
+          const rKey = gapResults.roleKey || gapResults.role_key;
+          
+          if (candidateId && rKey) {
+            const courseData = await getCourseRecommendations(candidateId, rKey, 25, 10);
+            recommendedCourses = courseData.recommendations || [];
+            console.log(`✅ Fetched ${recommendedCourses.length} courses to save.`);
+          }
+        } catch (err) {
+          console.error("⚠️ Failed to fetch course recommendations during pipeline:", err);
+        }
+
+        // Store results in the profile backend
+        console.log("💾 Saving analysis results to profile...");
+        try {
+          const analysisData = buildAnalysisData(gapResults, gapResults.roleLabel, recommendedCourses);
+          await saveAnalysisToProfile(analysisData);
+        } catch (err) {
+          console.error("⚠️ Failed to save analysis to profile:", err);
+        }
 
         // Navigate to results page after a short delay
         setTimeout(() => {

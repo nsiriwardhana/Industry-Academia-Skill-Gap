@@ -7,7 +7,7 @@ Provides:
 - DELETE /job-gap/{job_id} - Delete job posting from KG
 
 Example curl:
-    curl -X POST "http://localhost:8002/job-gap/analyze" \
+    curl -X POST "http://localhost:8003/job-gap/analyze" \
          -H "Content-Type: multipart/form-data" \
          -F "candidate_id=cand_001" \
          -F "jd_file=@job_description.png" \
@@ -23,8 +23,10 @@ from typing import List
 
 from database import Neo4jConnection
 from services import get_job_gap_service
+from services.cv_parser_service import get_cv_parser_service
 from models.schemas import ExtractedData
 from agents.kg_writer import KGWriterTool
+from config import SKILL_GAP_RANKING_METHOD
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,10 @@ class SkillGapItem(BaseModel):
     importance: float = Field(..., ge=0, le=1, description="Skill importance for role")
     match_strength: float = Field(..., ge=0, le=1, description="How well candidate matches")
     deficit: float = Field(..., ge=0, description="Skill gap (importance × (1 - match))")
+    P_gnn: Optional[float] = Field(None, ge=0, le=1, description="GNN learnability probability")
+    final_score: Optional[float] = Field(None, description="Ranking score used for ordering")
+    reason: Optional[str] = Field(None, description="Human-readable ranking reason")
+    ranking_method: Optional[str] = Field(None, description="symbolic, hybrid, or additive_gnn")
 
 
 class JobGapResponse(BaseModel):
@@ -53,6 +59,7 @@ class JobGapResponse(BaseModel):
     matched_skills: List[SkillGapItem] = Field(default=[], description="Skills candidate has")
     missing_skills_ranked: List[SkillGapItem] = Field(default=[], description="Missing skills by deficit")
     explanation_text: str = Field(..., description="Plain English explanation")
+    ranking_method: Optional[str] = Field(None, description="Ranking method used")
     candidate_upsert: Optional[dict] = Field(None, description="Candidate KG write result")
     error: Optional[str] = Field(None, description="Error message if any")
 
@@ -121,44 +128,30 @@ EXAMPLE_CANDIDATE_JSON = """{
     response_model=JobGapResponse,
     summary="Analyze gap between candidate and job description",
     description="""
-Upload a job description image/PDF along with candidate JSON data to analyze the skill gap.
+Upload a job description image/PDF along with candidate JSON data or PDF to analyze the skill gap.
 
 **Input:**
-- `candidate_json`: JSON string containing candidate profile (ExtractedData format)
+- `candidate_json`: JSON string containing candidate profile (ExtractedData format) OR 
+- `cv_file`: PDF/DOCX resume file to continuously extract candidate data using CV parser
 - `jd_file`: Job description image (PNG, JPG) or PDF
 - `store_job`: Whether to store JobPosting in Neo4j (default: true)
 - `top_k`: Number of top skills to analyze (default: 25)
-
-**Pipeline:**
-1. Parse `candidate_json` into candidate profile
-2. Upsert candidate into Neo4j (Person, Skills, Projects, Education, Certifications)
-3. OCR extraction from JD using Chandra (HuggingFace)
-4. Skill extraction from JD text
-5. Skill normalization via embedding shortlist + HuggingFace LLM
-6. Build JobPosting skill profile with importance weights
-7. Store JobPosting to Neo4j if `store_job=true`
-8. Compute candidate-vs-job gap:
-   - `deficit = importance × (1 - match_strength)`
-   - `skill_gap_index = sum(deficit) / sum(importance)`
-   - `readiness = 1 - skill_gap_index`
-9. Generate plain English explanation
-
-**Supported file types:**
-- Images: PNG, JPG, JPEG
-- Documents: PDF
-
-**Note:** First-time processing may be slower due to HuggingFace model loading.
+...
 """
 )
 async def analyze_job_gap(
-    candidate_json: str = Form(
-        ...,
-        description="Candidate JSON data (ExtractedData format - see Swagger schema)",
-        example=EXAMPLE_CANDIDATE_JSON
-    ),
     jd_file: UploadFile = File(
         ...,
         description="Job description image (PNG, JPG) or PDF file"
+    ),
+    candidate_json: str = Form(
+        None,
+        description="Candidate JSON data (ExtractedData format - see Swagger schema)",
+        example=EXAMPLE_CANDIDATE_JSON
+    ),
+    cv_file: UploadFile = File(
+        None,
+        description="CV/Resume PDF file"
     ),
     store_job: bool = Form(
         True,
@@ -169,44 +162,90 @@ async def analyze_job_gap(
         ge=1,
         le=100,
         description="Number of top skills to analyze"
+    ),
+    ranking_method: Optional[str] = Form(
+        None,
+        description="Ranking method: symbolic, hybrid, or additive_gnn"
     )
 ):
     """
-    Analyze skill gap between candidate (from JSON) and uploaded job description.
-    
-    Returns readiness score, skill_gap_index, matched skills, missing skills ranked by deficit,
-    and a plain English explanation.
+    Analyze skill gap between candidate (from JSON or parsed PDF) and uploaded job description.
     """
-    logger.info(f"Job gap analysis request: file={jd_file.filename}")
+    logger.info(f"Job gap analysis request: jd_file={jd_file.filename}")
+
+    effective_ranking_method = ranking_method or SKILL_GAP_RANKING_METHOD
+    if effective_ranking_method not in ["symbolic", "hybrid", "additive_gnn"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid ranking_method '{effective_ranking_method}'. Use symbolic, hybrid, or additive_gnn"
+        )
     
-    # Step 1: Parse candidate JSON
-    try:
-        candidate_data = json.loads(candidate_json)
-        candidate_id = candidate_data.get("candidate_id")
-        
-        if not candidate_id:
+    if not candidate_json and not cv_file:
+         raise HTTPException(
+             status_code=400,
+             detail="Either 'candidate_json' or 'cv_file' must be provided"
+         )
+
+    # Step 1: Parse candidate data
+    extracted_data = None
+    candidate_id = None
+    
+    if cv_file:
+         try:
+             logger.info(f"📤 Parsing CV PDF: {cv_file.filename}")
+             pdf_bytes = await cv_file.read()
+             if not pdf_bytes:
+                 raise HTTPException(status_code=400, detail="Empty CV file uploaded")
+             
+             cv_parser = get_cv_parser_service()
+             cv_data = await cv_parser.parse_cv_pdf(pdf_bytes, cv_file.filename)
+             candidate_id = cv_data.candidate_id
+             
+             # convert to ExtractedData for downstream steps (it returns an ExtractedData via parse_cv_pdf?)
+             # Assuming parse_cv_pdf returns ExtractedData compatible object.
+             # Wait, parse_cv_pdf returns cv_data which is ExtractedData instance
+             extracted_data = cv_data
+             logger.info(f"Parsed candidate from PDF: {candidate_id}")
+         except Exception as e:
+             logger.error(f"❌ CV parsing failed: {e}", exc_info=True)
+             raise HTTPException(
+                 status_code=500,
+                 detail=f"Failed to parse CV: {str(e)}"
+             )
+    else:
+        try:
+            # Handle null strings from JSON.stringify(null)
+            if candidate_json == "null" or candidate_json == "":
+                raise HTTPException(status_code=400, detail="candidate_json is null or empty but no cv_file provided")
+                
+            candidate_data = json.loads(candidate_json)
+            candidate_id = candidate_data.get("candidate_id")
+            
+            if not candidate_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="candidate_json must contain 'candidate_id' field"
+                )
+            
+            # Validate and convert to ExtractedData model
+            extracted_data = ExtractedData(**candidate_data)
+            
+            logger.info(f"Parsed candidate from JSON: {candidate_id}, skills: {len(extracted_data.all_skills or [])}")
+            
+        except json.JSONDecodeError as e:
             raise HTTPException(
                 status_code=400,
-                detail="candidate_json must contain 'candidate_id' field"
+                detail=f"Invalid JSON in candidate_json: {str(e)}"
             )
-        
-        # Validate and convert to ExtractedData model
-        extracted_data = ExtractedData(**candidate_data)
-        
-        logger.info(f"Parsed candidate: {candidate_id}, skills: {len(extracted_data.all_skills or [])}")
-        
-    except json.JSONDecodeError as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid JSON in candidate_json: {str(e)}"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid candidate data: {str(e)}"
-        )
+        except Exception as e:
+            if isinstance(e, HTTPException):
+               raise e
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid candidate data: {str(e)}"
+            )
     
-    # Validate file type
+    # Validate JD file type
     content_type = jd_file.content_type or ""
     valid_types = ["image/", "application/pdf"]
     if not any(t in content_type for t in valid_types):
@@ -246,7 +285,8 @@ async def analyze_job_gap(
                 file_content=file_content,
                 content_type=content_type,
                 store_job=store_job,
-                top_k=top_k
+                top_k=top_k,
+                ranking_method=effective_ranking_method
             )
         
         # Map to response model
@@ -263,6 +303,7 @@ async def analyze_job_gap(
                 SkillGapItem(**s) for s in result["missing_skills_ranked"]
             ],
             explanation_text=result["explanation_text"],
+            ranking_method=result.get("ranking_method", effective_ranking_method),
             candidate_upsert=candidate_upsert_result,
             error=result.get("error")
         )
@@ -287,7 +328,7 @@ async def extract_and_normalize(
     Useful for debugging and verifying the extraction pipeline.
     
     Example:
-        curl -X POST "http://localhost:8002/job-gap/extract" \\
+        curl -X POST "http://localhost:8003/job-gap/extract" \\
              -F "jd_file=@job_description.png"
     """
     try:

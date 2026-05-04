@@ -18,6 +18,7 @@ export interface JobGapResponse {
   job_title: string;
   readiness: number;
   skill_gap_index: number;
+  ranking_method?: string;
   matched_skills: MatchedSkill[];
   missing_skills_ranked: MissingSkill[];
   candidate_upsert: any;
@@ -35,6 +36,10 @@ export interface MissingSkill {
   importance: number;
   deficit: number;
   match_strength: number;
+  P_gnn?: number;
+  final_score?: number;
+  reason?: string;
+  ranking_method?: string;
 }
 
 /**
@@ -44,13 +49,15 @@ export async function analyzeJobGap(
   candidateJson: string,
   jdFile: File,
   storeJob: boolean = false,
-  topK: number = DEFAULT_OPTIONS.TOP_K
+  topK: number = DEFAULT_OPTIONS.TOP_K,
+  rankingMethod: 'symbolic' | 'hybrid' | 'additive_gnn' = 'hybrid'
 ): Promise<JobGapResponse> {
   const formData = new FormData();
   formData.append('candidate_json', candidateJson);
   formData.append('jd_file', jdFile);
   formData.append('store_job', storeJob.toString());
   formData.append('top_k', topK.toString());
+  formData.append('ranking_method', rankingMethod);
 
   const response = await fetch(ENDPOINTS.JOB_GAP.ANALYZE, {
     method: 'POST',

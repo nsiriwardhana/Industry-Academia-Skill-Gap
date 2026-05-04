@@ -1,0 +1,15 @@
+{
+  "sample_rate": 16000,
+  "max_seconds": 4,
+  "model_name": "facebook/wav2vec2-base",
+  "labels": [
+    "angry",
+    "calm",
+    "disgust",
+    "fear",
+    "happy",
+    "neutral",
+    "sad",
+    "surprise"
+  ]
+}

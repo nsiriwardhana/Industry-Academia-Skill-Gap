@@ -4,6 +4,7 @@ Database models for OAuth user management and candidate data collection
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+import bcrypt
 import enum
 from app.database import Base
 
@@ -57,12 +58,14 @@ class User(Base):
 
 class TargetRole(str, enum.Enum):
     """Enum for target job roles"""
+    AI_ML_ENGINEER = "AI/ML Engineer"
     ML_ENGINEER = "ML Engineer"
     DATA_ANALYST = "Data Analyst"
     DATA_ENGINEER = "Data Engineer"
     DATA_SCIENTIST = "Data Scientist"
     SOFTWARE_ENGINEER = "Software Engineer"
     DEVOPS_ENGINEER = "DevOps Engineer"
+    WEB_DEVELOPER = "Web Developer"
 
 
 class ProcessingStatus(str, enum.Enum):
@@ -119,6 +122,16 @@ class Candidate(Base):
     extracted_skills = Column(Text, nullable=True)  # JSON string of skills
     linkedin_profile_data = Column(Text, nullable=True)  # JSON string of LinkedIn data
     github_profile_data = Column(Text, nullable=True)  # JSON string of GitHub data
+    
+    # Analysis results from Personalized Learning Path module
+    latest_analysis_date = Column(DateTime(timezone=True), nullable=True)  # Last analysis timestamp
+    readiness_score = Column(Integer, nullable=True)  # 0-100 readiness score
+    skill_gap_index = Column(Text, nullable=True)  # JSON string of skill gap metrics
+    ai_explanation = Column(Text, nullable=True)  # AI-generated explanation from Qwen model
+    matched_skills = Column(Text, nullable=True)  # JSON array of skills candidate has
+    missing_skills = Column(Text, nullable=True)  # JSON array of skills candidate needs
+    analysis_summary = Column(Text, nullable=True)  # Brief summary of analysis results
+    recommended_courses = Column(Text, nullable=True)  # JSON array of recommended courses
 
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -198,4 +211,59 @@ class CandidateDocument(Base):
             "is_processed": self.is_processed,
             "processed_at": self.processed_at.isoformat() if self.processed_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class Admin(Base):
+    """
+    Admin model for administrator accounts with username/password authentication.
+    Separate from OAuth users for administrative access.
+    """
+    __tablename__ = "admins"
+
+    # Primary key
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+
+    # Admin credentials
+    username = Column(String(100), unique=True, index=True, nullable=False)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    
+    # Admin profile
+    full_name = Column(String(255), nullable=True)
+    
+    # Account status
+    is_active = Column(Boolean, default=True, nullable=False)
+    is_superadmin = Column(Boolean, default=False, nullable=False)  # Super admin privileges
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    last_login = Column(DateTime(timezone=True), nullable=True)
+
+    def __repr__(self):
+        return f"<Admin(id={self.id}, username={self.username}, email={self.email})>"
+
+    def verify_password(self, password: str) -> bool:
+        """Verify password against hashed password"""
+        return bcrypt.checkpw(password.encode('utf-8'), self.hashed_password.encode('utf-8'))
+
+    @staticmethod
+    def hash_password(password: str) -> str:
+        """Hash a password for storing"""
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+        return hashed.decode('utf-8')
+
+    def to_dict(self):
+        """Convert admin object to dictionary for API responses (excluding password)"""
+        return {
+            "id": self.id,
+            "username": self.username,
+            "email": self.email,
+            "full_name": self.full_name,
+            "is_active": self.is_active,
+            "is_superadmin": self.is_superadmin,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "last_login": self.last_login.isoformat() if self.last_login else None,
         }

@@ -10,6 +10,7 @@ from app.config import settings
 from app.database import init_db
 from app.routes import auth
 from app.routes import candidate
+from app.routes import admin
 
 # Create FastAPI application instance
 app = FastAPI(
@@ -46,6 +47,9 @@ app.include_router(auth.router)
 # Include candidate routes
 app.include_router(candidate.router)
 
+# Include admin routes
+app.include_router(admin.router)
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -53,21 +57,21 @@ async def startup_event():
     Run on application startup.
     Initialize database tables and storage directories.
     """
-    print("🚀 Starting OAuth 2.0 Authentication API with Candidate Data Collection...")
-    print(f"📊 Database: {settings.DATABASE_URL.split('@')[1] if '@' in settings.DATABASE_URL else 'Not configured'}")
-    print(f"🔐 Google OAuth: {'Configured' if settings.GOOGLE_CLIENT_ID else 'Not configured'}")
-    print(f"🌐 Frontend URL: {settings.FRONTEND_URL}")
-    print(f"🔧 Environment: {settings.ENVIRONMENT}")
-    print(f"📁 CV Storage: {settings.CV_STORAGE_PATH}")
+    print("[START] Starting OAuth 2.0 Authentication API with Candidate Data Collection...")
+    print(f"[DB] Database: {settings.DATABASE_URL.split('@')[1] if '@' in settings.DATABASE_URL else 'Not configured'}")
+    print(f"[AUTH] Google OAuth: {'Configured' if settings.GOOGLE_CLIENT_ID else 'Not configured'}")
+    print(f"[WEB] Frontend URL: {settings.FRONTEND_URL}")
+    print(f"[ENV] Environment: {settings.ENVIRONMENT}")
+    print(f"[STORAGE] CV Storage: {settings.CV_STORAGE_PATH}")
 
     # Initialize database (create tables)
     init_db()
-    print("✅ Database initialized successfully")
+    print("[OK] Database initialized successfully")
     
     # Create storage directories
     from app.services.candidate_service import CandidateService
     CandidateService.create_storage_directories()
-    print("✅ Storage directories created successfully")
+    print("[OK] Storage directories created successfully")
 
 
 @app.on_event("shutdown")
@@ -75,7 +79,7 @@ async def shutdown_event():
     """
     Run on application shutdown.
     """
-    print("👋 Shutting down OAuth 2.0 Authentication API...")
+    print("[STOP] Shutting down OAuth 2.0 Authentication API...")
 
 
 @app.get("/")

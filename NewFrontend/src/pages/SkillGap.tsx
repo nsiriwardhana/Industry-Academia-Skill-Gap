@@ -48,6 +48,8 @@ const SkillGap = () => {
   // Fetch course recommendations
   useEffect(() => {
     const fetchCourses = async () => {
+      // Use results.role_key — for job-based this is the temp role used for CV parsing (e.g. 'ai_ml_engineer')
+      // which is already stored in Neo4j and compatible with the course recommendation endpoint
       if (!results.candidate_id || !results.role_key) {
         console.log('⚠️ Missing candidate_id or role_key, skipping course recommendations');
         return;
@@ -57,7 +59,7 @@ const SkillGap = () => {
       setCoursesError(null);
 
       try {
-        console.log('📚 Fetching courses for:', results.candidate_id, results.role_key);
+        console.log(`📚 Fetching courses for candidate: ${results.candidate_id}, role: ${results.role_key} (type: ${type})`);
         const courseData = await getCourseRecommendations(
           results.candidate_id,
           results.role_key,
@@ -75,7 +77,7 @@ const SkillGap = () => {
     };
 
     fetchCourses();
-  }, [results.candidate_id, results.role_key]);
+  }, [results.candidate_id, results.role_key, type]);
 
   // Process skill gaps
   const skillGaps: SkillGapItem[] = (results.skill_gap_top || []).map((gap: any) => {
@@ -326,15 +328,17 @@ const SkillGap = () => {
                 </div>
 
                 <div className="space-y-3">
-                  <div>
+                  {/* COMMENTED OUT: Current Level Display */}
+                  {/* <div>
                     <div className="flex items-center justify-between text-sm mb-1">
                       <span className="text-muted-foreground">Current Level</span>
                       <span className="text-foreground font-medium">{skillGap.currentLevel}%</span>
                     </div>
                     <Progress value={skillGap.currentLevel} className="h-2" />
-                  </div>
+                  </div> */}
                   
-                  <div>
+                  {/* COMMENTED OUT: Required for Role Display */}
+                  {/* <div>
                     <div className="flex items-center justify-between text-sm mb-1">
                       <span className="text-muted-foreground">Required for Role</span>
                       <span className="text-primary font-medium">{normalizedImportance}%</span>
@@ -345,7 +349,7 @@ const SkillGap = () => {
                         style={{ width: `${normalizedImportance}%` }}
                       />
                     </div>
-                  </div>
+                  </div> */}
                   
                   {/* GNN Learning Potential */}
                   {skillGap.P_gnn !== undefined && (
